@@ -328,8 +328,8 @@ class Music(commands.Cog):
         if not ctx.voice_state.is_playing:
             return await ctx.send('Nothing being played at the moment.')
 
-        if 0 > volume > 100:
-            return await ctx.send('Volume must be between 0 and 100')
+        if not (0 <= volume <= 100):
+            return await ctx.respond('Volume must be between 0 and 100')
 
         ctx.voice_state.volume = volume / 100
         await ctx.send('Volume of the player set to {}%'.format(volume))
@@ -344,17 +344,17 @@ class Music(commands.Cog):
     async def _pause(self, ctx: commands.Context):
         """Pauses the currently playing song."""
 
-        if not ctx.voice_state.is_playing and ctx.voice_state.voice.is_playing():
+        if ctx.voice_state.is_playing and ctx.voice_state.voice.is_playing():
             ctx.voice_state.voice.pause()
-            await ctx.message.add_reaction('⏯')
+            await ctx.respond('⏯ Paused')
 
     @slash_command(name='resume')
     async def _resume(self, ctx: commands.Context):
         """Resumes a currently paused song."""
 
-        if not ctx.voice_state.is_playing and ctx.voice_state.voice.is_paused():
+        if ctx.voice_state.voice and ctx.voice_state.voice.is_paused():
             ctx.voice_state.voice.resume()
-            await ctx.message.add_reaction('⏯')
+            await ctx.respond('⏯ Resumed')
 
     @slash_command(name='stop')
     async def _stop(self, ctx: commands.Context):
@@ -362,9 +362,9 @@ class Music(commands.Cog):
 
         ctx.voice_state.songs.clear()
 
-        if not ctx.voice_state.is_playing:
+        if ctx.voice_state.is_playing:
             ctx.voice_state.voice.stop()
-            await ctx.message.add_reaction('⏹')
+        await ctx.respond('⏹ Stopped')
 
     @slash_command(name='skip')
     async def _skip(self, ctx: commands.Context):
@@ -373,11 +373,11 @@ class Music(commands.Cog):
         """
 
         if not ctx.voice_state.is_playing:
-            return await ctx.send('Not playing any music right now...')
+            return await ctx.respond('Not playing any music right now...')
 
-        voter = ctx.message.author
+        voter = ctx.author
         if voter == ctx.voice_state.current.requester:
-            await ctx.message.add_reaction('⏭')
+            await ctx.respond('⏭ Skipped')
             ctx.voice_state.skip()
 
         elif voter.id not in ctx.voice_state.skip_votes:
@@ -385,13 +385,13 @@ class Music(commands.Cog):
             total_votes = len(ctx.voice_state.skip_votes)
 
             if total_votes >= 3:
-                await ctx.message.add_reaction('⏭')
+                await ctx.respond('⏭ Skipped')
                 ctx.voice_state.skip()
             else:
-                await ctx.send('Skip vote added, currently at **{}/3**'.format(total_votes))
+                await ctx.respond('Skip vote added, currently at **{}/3**'.format(total_votes))
 
         else:
-            await ctx.send('You have already voted to skip this song.')
+            await ctx.respond('You have already voted to skip this song.')
 
     @slash_command(name='queue')
     async def _queue(self, ctx: commands.Context, *, page: int = 1):
@@ -424,7 +424,7 @@ class Music(commands.Cog):
             return await ctx.send('Empty queue.')
 
         ctx.voice_state.songs.shuffle()
-        await ctx.message.add_reaction('✅')
+        await ctx.respond('✅ Queue shuffled')
 
     @slash_command(name='remove')
     async def _remove(self, ctx: commands.Context, index: int):
@@ -434,7 +434,7 @@ class Music(commands.Cog):
             return await ctx.send('Empty queue.')
 
         ctx.voice_state.songs.remove(index - 1)
-        await ctx.message.add_reaction('✅')
+        await ctx.respond('✅ Removed song from queue')
 
     @slash_command(name='loop')
     async def _loop(self, ctx: commands.Context):
@@ -447,7 +447,7 @@ class Music(commands.Cog):
 
         # Inverse boolean value to loop and unloop.
         ctx.voice_state.loop = not ctx.voice_state.loop
-        await ctx.message.add_reaction('✅')
+        await ctx.respond('✅ Loop ' + ('enabled' if ctx.voice_state.loop else 'disabled'))
 
     @slash_command(name='play')
     async def _play(self, ctx: commands.Context, *, search: str):
@@ -464,18 +464,15 @@ class Music(commands.Cog):
             
             
              
-        await ctx.send("Searching...🔍")
+        await ctx.respond("Searching...🔍")
         try:
             source = await YTDLSource.create_source(ctx, search, loop=self.bot.loop)
         except YTDLError as e:
-            await ctx.send('An error occurred while processing this request: {}'.format(str(e)))
+            await ctx.followup.send('An error occurred while processing this request: {}'.format(str(e)))
         else:
-                
             song = Song(source)
-                
-
             await ctx.voice_state.songs.put(song)
-            await ctx.send('Enqueued {}'.format(str(source)))
+            await ctx.followup.send('Enqueued {}'.format(str(source)))
 
     @_join.before_invoke
     @_play.before_invoke

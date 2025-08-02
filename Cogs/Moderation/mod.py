@@ -102,7 +102,7 @@ class Moderation(commands.Cog):
 
         users = await self.get_user_data()
 
-        warns = await self.warn(member)
+        warns = await self.add_warn(member)
 
         await ctx.respond(f"<@{member.id}> has been warned. They now have {warns} warns.")
 	
@@ -126,7 +126,7 @@ class Moderation(commands.Cog):
         return users
 
 
-    async def warn(self, user, change = 1, mode = "warns"):
+    async def add_warn(self, user, change = 1, mode = "warns"):
         users = await self.get_user_data()
     
         users[str(user.id)][mode] += change

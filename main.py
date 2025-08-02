@@ -2,15 +2,27 @@ import discord
 from discord.ext import commands
 import os
 
-TOKEN = os.environ['TOKEN']
+TOKEN = os.environ.get('TOKEN')
+if not TOKEN:
+    print("ERROR: No TOKEN environment variable found!")
+    exit(1)
 intents = discord.Intents.all() #need to enable
 bot = commands.Bot(command_prefix='~', intents=intents)
 
 for foldername in os.listdir('./Cogs'): #for every folder in cogs
     for filename in os.listdir(f'./Cogs/{foldername}'):# for every file in a folder in cogs
         if filename.endswith('.py') and not filename in ['util.py', 'error.py']: #if the file is a python file and if the file is a cog
-            bot.load_extension(f'Cogs.{foldername}.{filename[:-3]}')#load the extension
+            try:
+                bot.load_extension(f'Cogs.{foldername}.{filename[:-3]}')#load the extension
+                print(f"Loaded {foldername}.{filename[:-3]}")
+            except Exception as e:
+                print(f"Failed to load {foldername}.{filename[:-3]}: {e}")
 
 
 
-bot.run(TOKEN)
+try:
+    bot.run(TOKEN)
+except discord.LoginFailure:
+    print("ERROR: Invalid TOKEN provided!")
+except Exception as e:
+    print(f"ERROR: Bot failed to start: {e}")
