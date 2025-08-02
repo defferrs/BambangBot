@@ -8,7 +8,7 @@ import discord
 import yt_dlp
 from async_timeout import timeout
 from discord.ext import commands
-from discord.commands import slash_command
+from discord.commands import slash_command, Option
 
 # Silence useless bug reports messages
 yt_dlp.utils.bug_reports_message = lambda: ''
@@ -331,7 +331,7 @@ class Music(commands.Cog):
         await ctx.respond('Disconnected from voice channel')
 
     @slash_command(name='volume')
-    async def _volume(self, ctx: commands.Context, *, volume: int):
+    async def _volume(self, ctx: commands.Context, volume: Option(int)):
         """Sets the volume of the player."""
 
         if not ctx.voice_state.is_playing:
@@ -406,7 +406,7 @@ class Music(commands.Cog):
             await ctx.respond('You have already voted to skip this song.')
 
     @slash_command(name='queue')
-    async def _queue(self, ctx: commands.Context, *, page: int = 1):
+    async def _queue(self, ctx: commands.Context, page: Option(int, default=1)):
         """Shows the player's queue.
         You can optionally specify the page to show. Each page contains 10 elements.
         """
@@ -439,7 +439,7 @@ class Music(commands.Cog):
         await ctx.respond('✅ Queue shuffled')
 
     @slash_command(name='remove')
-    async def _remove(self, ctx: commands.Context, index: int):
+    async def _remove(self, ctx: commands.Context, index: Option(int)):
         """Removes a song from the queue at a given index."""
 
         if len(ctx.voice_state.songs) == 0:
@@ -462,7 +462,7 @@ class Music(commands.Cog):
         await ctx.respond('✅ Loop ' + ('enabled' if ctx.voice_state.loop else 'disabled'))
 
     @slash_command(name='play')
-    async def _play(self, ctx: commands.Context, *, search: str):
+    async def _play(self, ctx: commands.Context, search: Option(str)):
         """Plays a song.
         If there are songs in the queue, this will be queued until the
         other songs finished playing.
