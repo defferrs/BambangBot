@@ -36,10 +36,11 @@ class Moderation(commands.Cog):
 
     @commands.command()#Because unban doesnt work with slash commands
     @commands.has_permissions(ban_members = True)
-    async def unban(self, ctx, member : discord.Member):
-    
-        await member.unban(member, reason=None)
-        await ctx.respond("Done.")
+    async def unban(self, ctx, *, member_id: int):
+        
+        user = await self.bot.fetch_user(member_id)
+        await ctx.guild.unban(user, reason=None)
+        await ctx.send("Done.")
     
     @slash_command()
     @commands.has_permissions(manage_roles = True)
