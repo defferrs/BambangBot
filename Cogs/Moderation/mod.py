@@ -11,14 +11,14 @@ class Moderation(commands.Cog):
         self.bot = bot
 
 
-    @slash_command(guild_ids=[...])
+    @slash_command()  # Remove guild_ids to make it global
     @commands.has_permissions(manage_messages = True)
     async def clear(self, ctx, amount: Option(int)):    
         await ctx.channel.purge(limit = amount)#Get the channel where the command is executed, then purge no. of messages provided
         await ctx.respond("Done.")#respond because in slash commands the response shows a little reply thing on top, for that you need ctx.respond
     
     
-    @slash_command(guild_ids=[...])
+    @slash_command()
     @commands.has_permissions(kick_members = True)
     async def kick(self, ctx,  member: Option(discord.Member)):
     
@@ -26,7 +26,7 @@ class Moderation(commands.Cog):
         await ctx.respond("Done.")
     
     
-    @slash_command(guild_ids=[...])
+    @slash_command()
     @commands.has_permissions(ban_members = True)
     async def ban(self, ctx, member: Option(discord.Member)):
     
@@ -41,31 +41,39 @@ class Moderation(commands.Cog):
         await member.unban(member, reason=None)
         await ctx.respond("Done.")
     
-    @slash_command(guild_ids=[...])
+    @slash_command()
     @commands.has_permissions(manage_roles = True)
     async def mute(self, ctx, member: Option(discord.Member)):
-        muted_role = ctx.guild.get_role(1234567890)#get the muted role with ID
+        muted_role = ctx.guild.get_role(1234567890)#get the muted role with ID - UPDATE THIS WITH YOUR ACTUAL ROLE ID
+        
+        if not muted_role:
+            await ctx.respond("Muted role not found! Please check the role ID.")
+            return
     
         await member.add_roles(muted_role)#add the mute role
     
         await ctx.respond("The member has been muted")
 
 
-    @slash_command(guild_ids=[...])
+    @slash_command()
     @commands.has_permissions(manage_roles = True)
     async def unmute(self, ctx, member: Option(discord.Member)):
-        muted_role = ctx.guild.get_role(1234567890)
+        muted_role = ctx.guild.get_role(1234567890)#get the muted role with ID - UPDATE THIS WITH YOUR ACTUAL ROLE ID
+        
+        if not muted_role:
+            await ctx.respond("Muted role not found! Please check the role ID.")
+            return
     
         await member.remove_roles(muted_role)#remove muted role
     
         await ctx.respond("The member has been unmuted")                                                   
                                                  
 
-    @slash_command(guild_ids=[...])
+    @slash_command()
     async def membercount(self, ctx):
         await ctx.respond(ctx.guild.member_count)#get guild no. of members
 	
-    @slash_command(guild_ids=[...])
+    @slash_command()
     async def timeout(self, ctx, member: Option(discord.Member), minutes: Option(int)):
         """Apply a timeout to a member"""
 
@@ -76,7 +84,7 @@ class Moderation(commands.Cog):
 
 #Warn command section(it is still in the same class)-----------------------------------------------------
 
-    @slash_command(guild_ids=[...])    
+    @slash_command()    
     async def warnings(self, ctx, member: Option(discord.Member)):
         await self.open_account(member)
 
@@ -86,7 +94,7 @@ class Moderation(commands.Cog):
 
         await ctx.respond(f"{member.name} has {warns} warns.")
 
-    @slash_command(guild_ids=[...])    
+    @slash_command()    
     @commands.has_permissions(kick_members = True)
     async def warn(self, ctx, member: Option(discord.Member)):
         await self.open_account(member)

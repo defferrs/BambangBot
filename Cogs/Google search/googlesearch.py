@@ -1,4 +1,3 @@
-import google
 from googlesearch import search
 import discord
 from discord.ext import commands
@@ -10,7 +9,7 @@ class Search(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @slash_command(guild_ids=[...])
+    @slash_command()  # Remove guild_ids to make it global, or add your actual guild IDs
     async def search(self, ctx, query: Option(str)):
         msg = await ctx.respond(f"Searching...🔍")
         embed = discord.Embed(title=f"Search results", description=f"Query: {query}")
