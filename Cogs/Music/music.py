@@ -8,6 +8,7 @@ import discord
 import yt_dlp
 from async_timeout import timeout
 from discord.ext import commands
+from discord.commands import slash_command
 
 # Silence useless bug reports messages
 yt_dlp.utils.bug_reports_message = lambda: ''
@@ -286,12 +287,17 @@ class Music(commands.Cog):
     async def _join(self, ctx: commands.Context):
         """Joins a voice channel."""
 
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            return await ctx.respond('You are not connected to a voice channel.')
+
         destination = ctx.author.voice.channel
         if ctx.voice_state.voice:
             await ctx.voice_state.voice.move_to(destination)
+            await ctx.respond(f'Moved to {destination.name}')
             return
 
         ctx.voice_state.voice = await destination.connect()
+        await ctx.respond(f'Connected to {destination.name}')
 
     @slash_command(name='summon')
     @commands.has_permissions(manage_guild=True)
@@ -301,14 +307,16 @@ class Music(commands.Cog):
         """
 
         if not channel and not ctx.author.voice:
-            raise VoiceError('You are neither connected to a voice channel nor specified a channel to join.')
+            return await ctx.respond('You are neither connected to a voice channel nor specified a channel to join.')
 
         destination = channel or ctx.author.voice.channel
         if ctx.voice_state.voice:
             await ctx.voice_state.voice.move_to(destination)
+            await ctx.respond(f'Moved to {destination.name}')
             return
 
         ctx.voice_state.voice = await destination.connect()
+        await ctx.respond(f'Connected to {destination.name}')
 
     @slash_command(name='leave', aliases=['disconnect'])
     @commands.has_permissions(manage_guild=True)
@@ -316,29 +324,33 @@ class Music(commands.Cog):
         """Clears the queue and leaves the voice channel."""
 
         if not ctx.voice_state.voice:
-            return await ctx.send('Not connected to any voice channel.')
+            return await ctx.respond('Not connected to any voice channel.')
 
         await ctx.voice_state.stop()
         del self.voice_states[ctx.guild.id]
+        await ctx.respond('Disconnected from voice channel')
 
     @slash_command(name='volume')
     async def _volume(self, ctx: commands.Context, *, volume: int):
         """Sets the volume of the player."""
 
         if not ctx.voice_state.is_playing:
-            return await ctx.send('Nothing being played at the moment.')
+            return await ctx.respond('Nothing being played at the moment.')
 
         if not (0 <= volume <= 100):
             return await ctx.respond('Volume must be between 0 and 100')
 
         ctx.voice_state.volume = volume / 100
-        await ctx.send('Volume of the player set to {}%'.format(volume))
+        await ctx.respond('Volume of the player set to {}%'.format(volume))
 
     @slash_command(name='now', aliases=['current', 'playing'])
     async def _now(self, ctx: commands.Context):
         """Displays the currently playing song."""
 
-        await ctx.send(embed=ctx.voice_state.current.create_embed())
+        if not ctx.voice_state.current:
+            return await ctx.respond('Nothing being played at the moment.')
+            
+        await ctx.respond(embed=ctx.voice_state.current.create_embed())
 
     @slash_command(name='pause')
     async def _pause(self, ctx: commands.Context):
@@ -400,7 +412,7 @@ class Music(commands.Cog):
         """
 
         if len(ctx.voice_state.songs) == 0:
-            return await ctx.send('Empty queue.')
+            return await ctx.respond('Empty queue.')
 
         items_per_page = 10
         pages = math.ceil(len(ctx.voice_state.songs) / items_per_page)
@@ -414,14 +426,14 @@ class Music(commands.Cog):
 
         embed = (discord.Embed(description='**{} tracks:**\n\n{}'.format(len(ctx.voice_state.songs), queue))
                  .set_footer(text='Viewing page {}/{}'.format(page, pages)))
-        await ctx.send(embed=embed)
+        await ctx.respond(embed=embed)
 
     @slash_command(name='shuffle')
     async def _shuffle(self, ctx: commands.Context):
         """Shuffles the queue."""
 
         if len(ctx.voice_state.songs) == 0:
-            return await ctx.send('Empty queue.')
+            return await ctx.respond('Empty queue.')
 
         ctx.voice_state.songs.shuffle()
         await ctx.respond('✅ Queue shuffled')
@@ -431,7 +443,7 @@ class Music(commands.Cog):
         """Removes a song from the queue at a given index."""
 
         if len(ctx.voice_state.songs) == 0:
-            return await ctx.send('Empty queue.')
+            return await ctx.respond('Empty queue.')
 
         ctx.voice_state.songs.remove(index - 1)
         await ctx.respond('✅ Removed song from queue')
@@ -443,7 +455,7 @@ class Music(commands.Cog):
         """
 
         if not ctx.voice_state.is_playing:
-            return await ctx.send('Nothing being played at the moment.')
+            return await ctx.respond('Nothing being played at the moment.')
 
         # Inverse boolean value to loop and unloop.
         ctx.voice_state.loop = not ctx.voice_state.loop
