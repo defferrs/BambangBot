@@ -1,6 +1,0 @@
-Collecting yt-dlp
-  Downloading yt_dlp-2025.7.21-py3-none-any.whl.metadata (175 kB)
-Downloading yt_dlp-2025.7.21-py3-none-any.whl (3.3 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.3/3.3 MB 28.5 MB/s eta 0:00:00
-Installing collected packages: yt-dlp
-Successfully installed yt-dlp-2025.7.21
