@@ -4,7 +4,6 @@ from discord.commands import slash_command
 import asyncio
 import random
 import yt_dlp
-import pyffmpeg
 import re
 
 class Music(commands.Cog):
@@ -69,10 +68,20 @@ class Music(commands.Cog):
             
             url = data['url']
             title = data.get('title', 'Unknown')
+            print(f"Creating audio source for: {title}")
+            print(f"Audio URL: {url}")
+            
+            # Check if opus is loaded
+            if not discord.opus.is_loaded():
+                print("Opus not loaded, trying to load...")
+                discord.opus.load_opus('opus')
+            
             source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, **self.ffmpeg_options))
             return source, title
         except Exception as e:
-            print(f"Error getting audio source: {e}")
+            print(f"Error getting audio source: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None, None
 
     async def play_song(self, ctx, song_info):
@@ -123,11 +132,14 @@ class Music(commands.Cog):
         if not ctx.author.voice:
             await ctx.respond("Anda sedang tidak berada di voice channel.")
             return
+        
+        # Handle voice connection
         if not ctx.voice_client:
             await ctx.author.voice.channel.connect()
-            await ctx.respond("Bot telah bergabung ke voice channel.")
+            await ctx.respond("Bot telah bergabung ke voice channel dan memproses lagu...")
         else:
             await ctx.voice_client.move_to(ctx.author.voice.channel)
+            await ctx.respond("Memproses lagu...")
 
         if ctx.guild.id not in self.music_queue:
             self.music_queue[ctx.guild.id] = []
@@ -141,7 +153,7 @@ class Music(commands.Cog):
         song_info = {"query": query, "display": display_text}
         self.music_queue[ctx.guild.id].append(song_info)
 
-        await ctx.respond(f"Ditambahkan ke antrian: {display_text}")
+        await ctx.followup.send(f"Ditambahkan ke antrian: {display_text}")
         if not ctx.voice_client.is_playing():
             await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
 
