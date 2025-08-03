@@ -3,6 +3,9 @@ from discord.ext import commands
 from discord.commands import slash_command
 import asyncio
 import random
+import ffmpeg
+import yt_dlp
+import pyffmpeg
 
 class Music(commands.Cog):
     def __init__(self, bot):
