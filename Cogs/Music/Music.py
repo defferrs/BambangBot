@@ -27,7 +27,13 @@ class Music(commands.Cog):
         }
         self.ffmpeg_options = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-            'options': '-vn'
+            'options': '-vn -f s16le'
+        }
+        
+        # Alternative options to try if default doesn't work
+        self.ffmpeg_options_alt = {
+            'before_options': '-nostdin',
+            'options': '-vn -ar 48000 -ac 2 -f s16le'
         }
         self.ytdl = yt_dlp.YoutubeDL(self.ytdl_format_options)
 
@@ -116,8 +122,25 @@ class Music(commands.Cog):
                 if not opus_loaded:
                     print("WARNING: Could not load opus library - voice may not work properly")
             
-            source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, before_options=self.ffmpeg_options['before_options'], options=self.ffmpeg_options['options']))
-            return source, title
+            print(f"Attempting to create audio source with URL: {url}")
+            
+            # Try primary FFmpeg options first
+            try:
+                source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, before_options=self.ffmpeg_options['before_options'], options=self.ffmpeg_options['options']))
+                print("Successfully created audio source with primary options")
+                return source, title
+            except Exception as e:
+                print(f"Primary FFmpeg options failed: {e}")
+                
+                # Try alternative FFmpeg options
+                try:
+                    print("Trying alternative FFmpeg options...")
+                    source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, before_options=self.ffmpeg_options_alt['before_options'], options=self.ffmpeg_options_alt['options']))
+                    print("Successfully created audio source with alternative options")
+                    return source, title
+                except Exception as e2:
+                    print(f"Alternative FFmpeg options also failed: {e2}")
+                    raise e2
         except Exception as e:
             print(f"Error getting audio source: {str(e)}")
             import traceback
@@ -142,8 +165,11 @@ class Music(commands.Cog):
             def after_playing(error):
                 if error:
                     print(f'Player error: {str(error)}')
+                    print(f'Error type: {type(error)}')
                 else:
-                    print('Song finished playing')
+                    print('Song finished playing normally')
+                
+                print(f"Voice client state after playback: connected={ctx.voice_client.is_connected() if ctx.voice_client else False}, playing={ctx.voice_client.is_playing() if ctx.voice_client else False}")
                 
                 # Check if there are more songs in queue
                 coro = self.handle_next_song(ctx)
@@ -154,10 +180,21 @@ class Music(commands.Cog):
                 await ctx.followup.send("Voice client disconnected unexpectedly")
                 return
 
-            print(f"Starting playback of: {title}")
+            print(f"Starting playbook of: {title}")
+            print(f"Voice client volume: {getattr(source, 'volume', 'No volume control')}")
+            print(f"Voice client latency: {ctx.voice_client.latency}")
+            
             ctx.voice_client.play(source, after=after_playing)
+            
+            # Wait a moment and check if it's actually playing
+            await asyncio.sleep(1)
+            is_playing = ctx.voice_client.is_playing()
+            print(f"Voice client is playing after 1 second: {is_playing}")
+            
+            if not is_playing:
+                print("WARNING: Voice client reports not playing - there may be an audio issue")
+            
             await ctx.followup.send(f"Now playing: {title}")
-            print(f"Voice client is playing: {ctx.voice_client.is_playing()}")
 
         except Exception as e:
             error_msg = str(e) if str(e) else "Unknown error occurred"
