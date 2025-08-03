@@ -144,28 +144,43 @@ class Music(commands.Cog):
                     print(f'Player error: {str(error)}')
                 else:
                     print('Song finished playing')
-                self.bot.loop.call_soon_threadsafe(self.play_next_song.set)
+                
+                # Check if there are more songs in queue
+                coro = self.handle_next_song(ctx)
+                asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
+
+            # Check if voice client is still connected
+            if not ctx.voice_client or not ctx.voice_client.is_connected():
+                await ctx.followup.send("Voice client disconnected unexpectedly")
+                return
 
             ctx.voice_client.play(source, after=after_playing)
-
             await ctx.followup.send(f"Now playing: {title}")
 
-            await self.play_next_song.wait()
-            self.play_next_song.clear()
-
-            if ctx.voice_client and ctx.voice_client.is_playing():
-                return
-            if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
-                await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
-            else:
-                if ctx.voice_client:
-                    await ctx.voice_client.disconnect()
         except Exception as e:
             error_msg = str(e) if str(e) else "Unknown error occurred"
             print(f"Error playing song: {error_msg}")
             await ctx.followup.send(f"Error playing song: {error_msg}")
             if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
                 await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
+
+    async def handle_next_song(self, ctx):
+        try:
+            # Wait a moment to ensure the current song has finished
+            await asyncio.sleep(1)
+            
+            if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
+                next_song = self.music_queue[ctx.guild.id].pop(0)
+                await self.play_song(ctx, next_song)
+            else:
+                # Only disconnect after a delay to allow for new songs to be added
+                await asyncio.sleep(5)
+                if ctx.voice_client and not ctx.voice_client.is_playing():
+                    if ctx.guild.id not in self.music_queue or not self.music_queue[ctx.guild.id]:
+                        await ctx.voice_client.disconnect()
+                        print("Disconnected due to empty queue")
+        except Exception as e:
+            print(f"Error handling next song: {e}")
 
     @slash_command(contexts={discord.InteractionContextType.guild})
     async def play(self, ctx, query: str):
