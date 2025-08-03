@@ -116,7 +116,7 @@ class Music(commands.Cog):
                 if not opus_loaded:
                     print("WARNING: Could not load opus library - voice may not work properly")
             
-            source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, **self.ffmpeg_options))
+            source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, before_options=self.ffmpeg_options['before_options'], options=self.ffmpeg_options['options']))
             return source, title
         except Exception as e:
             print(f"Error getting audio source: {str(e)}")
@@ -154,8 +154,10 @@ class Music(commands.Cog):
                 await ctx.followup.send("Voice client disconnected unexpectedly")
                 return
 
+            print(f"Starting playback of: {title}")
             ctx.voice_client.play(source, after=after_playing)
             await ctx.followup.send(f"Now playing: {title}")
+            print(f"Voice client is playing: {ctx.voice_client.is_playing()}")
 
         except Exception as e:
             error_msg = str(e) if str(e) else "Unknown error occurred"
