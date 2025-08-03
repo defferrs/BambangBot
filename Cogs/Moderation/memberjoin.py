@@ -1,59 +1,262 @@
+
 import discord
 from discord.ext import commands
-
-
-intents = discord.Intents.default()
-intents.members = True
-intents.guilds = True
-intents.message_content = True
+from discord.commands import slash_command, Option
+import json
+import os
 
 class memberjoin(commands.Cog):
-  def __init__(self, bot):
-    self.bot = bot
-    self.intents = intents
-    self.bot = commands.Bot(command_prefix='~', intents=self.intents)
-    self.bot.remove_command('help')
+    def __init__(self, bot):
+        self.bot = bot
+        self.settings = {}
+        self.load_settings()
 
-  
-  
+    def load_settings(self):
+        """Load settings from JSON file"""
+        try:
+            os.makedirs("Cogs/Moderation/data", exist_ok=True)
+            if os.path.exists("Cogs/Moderation/data/memberjoin_settings.json"):
+                with open("Cogs/Moderation/data/memberjoin_settings.json", "r") as f:
+                    self.settings = json.load(f)
+            else:
+                self.settings = {}
+        except Exception as e:
+            print(f"Error loading member join settings: {e}")
+            self.settings = {}
 
-@commands.Cog.listener()
-async def on_member_join(member):
-  print(f'{member} Telah bergabung dengan server ini!')
-  await member.send(f'Selamat datang di server ini, {member.name}!')
-  await member.add_roles(discord.utils.get(member.guild.roles, name='Member'))
-  await member.edit(nick=f'[member] {member.name}')
-  await member.guild.system_channel.send(f'Selamat datang {member.mention} di server ini!')
-  await member.guild.system_channel.send(f'Silahkan baca rules di {member.guild.rules_channel.mention} terlebih dahulu')
-  await member.guild.system_channel.send('Selamat bermain!')
+    def save_settings(self):
+        """Save settings to JSON file"""
+        try:
+            os.makedirs("Cogs/Moderation/data", exist_ok=True)
+            with open("Cogs/Moderation/data/memberjoin_settings.json", "w") as f:
+                json.dump(self.settings, f, indent=2)
+        except Exception as e:
+            print(f"Error saving member join settings: {e}")
 
+    def get_guild_settings(self, guild_id):
+        """Get settings for a specific guild"""
+        guild_id_str = str(guild_id)
+        if guild_id_str not in self.settings:
+            self.settings[guild_id_str] = {
+                "welcome_enabled": True,
+                "goodbye_enabled": True,
+                "auto_role": None,
+                "auto_nickname": True,
+                "welcome_message": "Selamat datang di server ini, {member}!",
+                "goodbye_message": "Selamat tinggal {member}! Kami akan merindukanmu!",
+                "welcome_channel": None,
+                "goodbye_channel": None
+            }
+        return self.settings[guild_id_str]
 
-@commands.Cog.listener()
-async def on_member_remove(member):
-  print(f'{member} Telah keluar dari server')
-  await member.guild.system_channel.send(f'{member.mention} Telah keluar dari server')
-  await member.guild.system_channel.send(f'Selamat tinggal {member.mention}!')
-  await member.guild.system_channel.send(f'Kami akan merindukanmu {member.mention}!')
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        """Handle member join events"""
+        guild_settings = self.get_guild_settings(member.guild.id)
+        
+        if not guild_settings["welcome_enabled"]:
+            return
 
-@commands.slash_command()
+        print(f'{member} joined {member.guild.name}!')
+        
+        # Send welcome DM
+        try:
+            welcome_msg = guild_settings["welcome_message"].format(
+                member=member.name,
+                guild=member.guild.name
+            )
+            await member.send(welcome_msg)
+        except discord.Forbidden:
+            print(f"Could not send DM to {member}")
 
-@slash_command()
-async def membercount(self, ctx):
-  await ctx.respond(ctx.guild.member_count)
-  print(f'Member count: {ctx.guild.member_count}')
+        # Add auto role if configured
+        if guild_settings["auto_role"]:
+            try:
+                role = member.guild.get_role(guild_settings["auto_role"])
+                if role:
+                    await member.add_roles(role, reason="Auto role on join")
+                    print(f"Added role {role.name} to {member}")
+                else:
+                    print(f"Auto role {guild_settings['auto_role']} not found")
+            except discord.Forbidden:
+                print(f"Missing permissions to add role to {member}")
+            except Exception as e:
+                print(f"Error adding role to {member}: {e}")
 
-@slash_command()
-async def memberlist(self, ctx):
-  await ctx.respond(ctx.guild.members)
-  print(f'Member list: {ctx.guild.members}')
+        # Set auto nickname if enabled
+        if guild_settings["auto_nickname"]:
+            try:
+                await member.edit(nick=f'[member] {member.name}')
+            except discord.Forbidden:
+                print(f"Could not set nickname for {member}")
 
-@slash_command()
-async def memberinfo(self, ctx):
-  await ctx.respond(ctx.guild.members)
-  print(f'Member info: {ctx.guild.members}', ctx.guild.members.name, ctx.guild.members.id, ctx.guild.members.joined_at, ctx.guild.members.roles, ctx.guild.members.status, ctx.guild.members.activity, ctx.guild.members.top_role,)
+        # Send welcome message to channel
+        welcome_channel_id = guild_settings["welcome_channel"]
+        welcome_channel = None
+        
+        if welcome_channel_id:
+            welcome_channel = member.guild.get_channel(welcome_channel_id)
+        
+        if not welcome_channel:
+            welcome_channel = member.guild.system_channel
 
+        if welcome_channel:
+            try:
+                embed = discord.Embed(
+                    title="Welcome!",
+                    description=f'Selamat datang {member.mention} di server ini!',
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="Rules",
+                    value=f'Silahkan baca rules di {member.guild.rules_channel.mention if member.guild.rules_channel else "channel rules"} terlebih dahulu',
+                    inline=False
+                )
+                embed.add_field(
+                    name="Have fun!",
+                    value='Selamat bermain!',
+                    inline=False
+                )
+                await welcome_channel.send(embed=embed)
+            except Exception as e:
+                print(f"Error sending welcome message: {e}")
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        """Handle member leave events"""
+        guild_settings = self.get_guild_settings(member.guild.id)
+        
+        if not guild_settings["goodbye_enabled"]:
+            return
+
+        print(f'{member} left {member.guild.name}')
+        
+        # Send goodbye message to channel
+        goodbye_channel_id = guild_settings["goodbye_channel"]
+        goodbye_channel = None
+        
+        if goodbye_channel_id:
+            goodbye_channel = member.guild.get_channel(goodbye_channel_id)
+        
+        if not goodbye_channel:
+            goodbye_channel = member.guild.system_channel
+
+        if goodbye_channel:
+            try:
+                goodbye_msg = guild_settings["goodbye_message"].format(
+                    member=member.mention
+                )
+                embed = discord.Embed(
+                    title="Goodbye!",
+                    description=goodbye_msg,
+                    color=discord.Color.red()
+                )
+                await goodbye_channel.send(embed=embed)
+            except Exception as e:
+                print(f"Error sending goodbye message: {e}")
+
+    @slash_command()
+    @commands.has_permissions(manage_guild=True)
+    async def setup_welcome(self, ctx, 
+                           enabled: Option(bool, "Enable welcome messages"),
+                           role: Option(discord.Role, "Auto role to assign", required=False),
+                           channel: Option(discord.TextChannel, "Welcome channel", required=False),
+                           auto_nickname: Option(bool, "Enable auto nickname", default=True),
+                           welcome_message: Option(str, "Custom welcome message (use {member} and {guild})", required=False)):
+        """Configure welcome settings for new members"""
+        guild_settings = self.get_guild_settings(ctx.guild.id)
+        
+        guild_settings["welcome_enabled"] = enabled
+        if role:
+            guild_settings["auto_role"] = role.id
+        if channel:
+            guild_settings["welcome_channel"] = channel.id
+        guild_settings["auto_nickname"] = auto_nickname
+        if welcome_message:
+            guild_settings["welcome_message"] = welcome_message
+        
+        self.save_settings()
+        
+        embed = discord.Embed(
+            title="Welcome Settings Updated",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Enabled", value=enabled, inline=True)
+        embed.add_field(name="Auto Role", value=role.mention if role else "None", inline=True)
+        embed.add_field(name="Channel", value=channel.mention if channel else "System Channel", inline=True)
+        embed.add_field(name="Auto Nickname", value=auto_nickname, inline=True)
+        
+        await ctx.respond(embed=embed, ephemeral=True)
+
+    @slash_command()
+    @commands.has_permissions(manage_guild=True)
+    async def setup_goodbye(self, ctx,
+                           enabled: Option(bool, "Enable goodbye messages"),
+                           channel: Option(discord.TextChannel, "Goodbye channel", required=False),
+                           goodbye_message: Option(str, "Custom goodbye message (use {member})", required=False)):
+        """Configure goodbye settings for leaving members"""
+        guild_settings = self.get_guild_settings(ctx.guild.id)
+        
+        guild_settings["goodbye_enabled"] = enabled
+        if channel:
+            guild_settings["goodbye_channel"] = channel.id
+        if goodbye_message:
+            guild_settings["goodbye_message"] = goodbye_message
+        
+        self.save_settings()
+        
+        embed = discord.Embed(
+            title="Goodbye Settings Updated",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Enabled", value=enabled, inline=True)
+        embed.add_field(name="Channel", value=channel.mention if channel else "System Channel", inline=True)
+        
+        await ctx.respond(embed=embed, ephemeral=True)
+
+    @slash_command()
+    async def membercount(self, ctx):
+        """Get the current member count"""
+        await ctx.respond(f"This server has {ctx.guild.member_count} members")
+
+    @slash_command()
+    @commands.has_permissions(manage_guild=True)
+    async def view_settings(self, ctx):
+        """View current member join/leave settings"""
+        guild_settings = self.get_guild_settings(ctx.guild.id)
+        
+        embed = discord.Embed(
+            title="Member Join/Leave Settings",
+            color=discord.Color.blue()
+        )
+        
+        # Welcome settings
+        welcome_channel = ctx.guild.get_channel(guild_settings["welcome_channel"]) if guild_settings["welcome_channel"] else None
+        auto_role = ctx.guild.get_role(guild_settings["auto_role"]) if guild_settings["auto_role"] else None
+        
+        embed.add_field(
+            name="Welcome Settings",
+            value=f"Enabled: {guild_settings['welcome_enabled']}\n"
+                  f"Auto Role: {auto_role.mention if auto_role else 'None'}\n"
+                  f"Channel: {welcome_channel.mention if welcome_channel else 'System Channel'}\n"
+                  f"Auto Nickname: {guild_settings['auto_nickname']}\n"
+                  f"Message: {guild_settings['welcome_message'][:100]}...",
+            inline=False
+        )
+        
+        # Goodbye settings
+        goodbye_channel = ctx.guild.get_channel(guild_settings["goodbye_channel"]) if guild_settings["goodbye_channel"] else None
+        
+        embed.add_field(
+            name="Goodbye Settings", 
+            value=f"Enabled: {guild_settings['goodbye_enabled']}\n"
+                  f"Channel: {goodbye_channel.mention if goodbye_channel else 'System Channel'}\n"
+                  f"Message: {guild_settings['goodbye_message'][:100]}...",
+            inline=False
+        )
+        
+        await ctx.respond(embed=embed, ephemeral=True)
 
 def setup(bot):
     bot.add_cog(memberjoin(bot))
     print('memberjoin.py loaded')
-  
