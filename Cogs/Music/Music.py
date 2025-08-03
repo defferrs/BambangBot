@@ -266,7 +266,7 @@ class Music(commands.Cog):
                 if ctx.voice_client and not ctx.voice_client.is_playing():
                     if ctx.guild.id not in self.music_queue or not self.music_queue[ctx.guild.id]:
                         await ctx.voice_client.disconnect()
-                        print("Disconnected due to empty queue")
+                        print("Disconnected due to empty queue", ephemeral=True)
         except Exception as e:
             print(f"Error handling next song: {e}")
 
@@ -274,17 +274,17 @@ class Music(commands.Cog):
     async def play(self, ctx, query: str):
         # Ensure we're in a guild and author is a Member
         if not hasattr(ctx.author, 'voice') or not ctx.author.voice:
-            await ctx.respond("Anda sedang tidak berada di voice channel.")
+            await ctx.respond("Anda sedang tidak berada di voice channel.", ephemeral=True)
             return
         
         # Handle voice connection
         try:
             if not ctx.voice_client:
                 await ctx.author.voice.channel.connect()
-                await ctx.respond("Bot telah bergabung ke voice channel dan memproses lagu...")
+                await ctx.respond("Bot telah bergabung ke voice channel dan memproses lagu...", ephemeral=True)
             else:
                 await ctx.voice_client.move_to(ctx.author.voice.channel)
-                await ctx.respond("Memproses lagu...")
+                await ctx.respond("Memproses lagu...", ephemeral=True)
         except Exception as e:
             await ctx.respond(f"Error connecting to voice channel: {str(e)}")
             return
@@ -311,7 +311,7 @@ class Music(commands.Cog):
             await ctx.voice_client.disconnect()
             if ctx.guild.id in self.music_queue:
                 self.music_queue[ctx.guild.id] = []
-            await ctx.respond("Bot telah meninggalkan voice channel dan antrian telah dihapus.")
+            await ctx.respond("Bot telah meninggalkan voice channel dan antrian telah dihapus.", ephemeral=True)
         else:
             await ctx.respond("Bot tidak sedang berada di voice channel.")
 

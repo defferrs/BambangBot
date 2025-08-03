@@ -6,7 +6,6 @@ description = "Discord bot with moderation, music, and search features"
 authors = ["Your Name <you@example.com>"]
 requires-python = ">=3.11"
 dependencies = [
-    "py-cord>=2.4.0",
     "googlesearch-python>=1.2.3",
     "beautifulsoup4>=4.12.0",
     "yt-dlp>=2023.12.30",
@@ -22,4 +21,5 @@ dependencies = [
     "opuslib==3.0.1",
     "opusfc==1.4.0",
     "ffmpeg-python>=0.2.0",
+    "py-cord>=2.6.1",
 ]

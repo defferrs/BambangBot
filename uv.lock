@@ -339,7 +339,7 @@ requires-dist = [
     { name = "googlesearch-python", specifier = ">=1.2.3" },
     { name = "opusfc", specifier = "==1.4.0" },
     { name = "opuslib", specifier = "==3.0.1" },
-    { name = "py-cord", specifier = ">=2.4.0" },
+    { name = "py-cord", specifier = ">=2.6.1" },
     { name = "pyffmpeg", specifier = "==2.4.2.18.1" },
     { name = "pynacl", extras = ["voice"], specifier = ">=1.5.0" },
     { name = "python-ffmpeg-video-streaming", specifier = "==0.1.16" },

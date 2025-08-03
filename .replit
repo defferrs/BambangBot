@@ -10,7 +10,7 @@ requiredFiles = [".replit", "replit.nix"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["libopus", "libsodium"]
+packages = ["ffmpeg-full", "libopus", "libsodium"]
 
 
 [deployment]
