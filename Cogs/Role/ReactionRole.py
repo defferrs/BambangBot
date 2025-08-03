@@ -76,16 +76,32 @@ class ReactionRole(commands.Cog):
         self.bot.loop.create_task(self.check_reaction_roles())
 
     @slash_command()
-    async def add_reaction_role(self, ctx, role: discord.Role, channel: discord.TextChannel, message_id: int, emoji: str):
+    async def add_reaction_role(self, ctx, role: discord.Role, channel: discord.TextChannel, emoji: str):
         if ctx.author.guild_permissions.manage_roles:
-            guild_id_str = str(ctx.guild.id)
-            role_id_str = str(role.id)
-            
-            if guild_id_str not in self.reaction_roles:
-                self.reaction_roles[guild_id_str] = {}
-            self.reaction_roles[guild_id_str][role_id_str] = [channel.id, message_id, emoji]
-            await ctx.respond(f"Added reaction role {role.name} to message {message_id} in channel {channel.name} with emoji {emoji}")
-            print(f"Added reaction role {role.name} to message {message_id} in channel {channel.name} with emoji {emoji}")
+            try:
+                # Get the latest message from the channel
+                async for message in channel.history(limit=1):
+                    latest_message = message
+                    break
+                else:
+                    await ctx.respond(f"No messages found in {channel.name}")
+                    return
+                
+                guild_id_str = str(ctx.guild.id)
+                role_id_str = str(role.id)
+                
+                if guild_id_str not in self.reaction_roles:
+                    self.reaction_roles[guild_id_str] = {}
+                self.reaction_roles[guild_id_str][role_id_str] = [channel.id, latest_message.id, emoji]
+                
+                # Add the reaction to the message
+                await latest_message.add_reaction(emoji)
+                
+                await ctx.respond(f"Added reaction role {role.name} to the latest message in {channel.name} with emoji {emoji}")
+                print(f"Added reaction role {role.name} to message {latest_message.id} in channel {channel.name} with emoji {emoji}")
+            except Exception as e:
+                await ctx.respond(f"Error setting up reaction role: {str(e)}")
+                print(f"Error in add_reaction_role: {e}")
         else:
             await ctx.respond("You don't have permission to manage roles.")
 
