@@ -70,9 +70,7 @@ class Moderation(commands.Cog):
         await ctx.respond("The member has been unmuted")                                                   
                                                  
 
-    @slash_command()
-    async def membercount(self, ctx):
-        await ctx.respond(ctx.guild.member_count)#get guild no. of members
+    # membercount command moved to memberjoin.py to avoid duplicates
 	
     @slash_command()
     async def timeout(self, ctx, member: Option(discord.Member), minutes: Option(int)):

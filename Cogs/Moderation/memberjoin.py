@@ -257,6 +257,16 @@ class memberjoin(commands.Cog):
         
         await ctx.respond(embed=embed, ephemeral=True)
 
+    @slash_command(name="sync_commands")
+    @commands.has_permissions(administrator=True)
+    async def sync_commands(self, ctx):
+        """Manually sync slash commands (Admin only)"""
+        try:
+            synced = await self.bot.sync_commands()
+            await ctx.respond(f"Synced {len(synced)} commands!", ephemeral=True)
+        except Exception as e:
+            await ctx.respond(f"Failed to sync commands: {e}", ephemeral=True)
+
 def setup(bot):
     bot.add_cog(memberjoin(bot))
     print('memberjoin.py loaded')
