@@ -301,7 +301,7 @@ class Music(commands.Cog):
 
     @slash_command(name='summon')
     @commands.has_permissions(manage_guild=True)
-    async def _summon(self, ctx: commands.Context, channel: Option(discord.VoiceChannel, required=False) = None):
+    async def _summon(self, ctx, channel: Option(discord.VoiceChannel, required=False) = None):
         """Summons the bot to a voice channel.
         If no channel was specified, it joins your channel.
         """
