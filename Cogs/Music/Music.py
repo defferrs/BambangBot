@@ -74,17 +74,24 @@ class Music(commands.Cog):
             # Check if opus is loaded
             if not discord.opus.is_loaded():
                 print("Opus not loaded, trying to load...")
-                # Try different opus library paths
+                # Try different opus library paths for Replit/Nix environment
                 opus_paths = [
                     'libopus.so.0',
+                    'libopus.so.0.8.0',
                     'libopus.so', 
                     '/nix/store/*/lib/libopus.so.0',
+                    '/nix/store/*/lib/libopus.so',
+                    '/usr/lib/x86_64-linux-gnu/libopus.so.0',
+                    '/usr/lib/libopus.so.0',
                     'opus'
                 ]
                 
                 opus_loaded = False
                 for opus_path in opus_paths:
                     try:
+                        if '*' in opus_path:
+                            # Skip wildcard paths for now
+                            continue
                         discord.opus.load_opus(opus_path)
                         print(f"Successfully loaded opus from: {opus_path}")
                         opus_loaded = True
@@ -94,7 +101,20 @@ class Music(commands.Cog):
                         continue
                 
                 if not opus_loaded:
-                    print("WARNING: Could not load opus library - audio may not work properly")
+                    print("WARNING: Could not load opus library - trying alternative approach...")
+                    # Try to use the system opus that should be available in Replit
+                    try:
+                        import ctypes.util
+                        opus_lib = ctypes.util.find_library('opus')
+                        if opus_lib:
+                            discord.opus.load_opus(opus_lib)
+                            print(f"Successfully loaded opus using ctypes.util: {opus_lib}")
+                            opus_loaded = True
+                    except Exception as e:
+                        print(f"Failed to load opus using ctypes.util: {e}")
+                
+                if not opus_loaded:
+                    print("WARNING: Could not load opus library - voice may not work properly")
             
             source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, **self.ffmpeg_options))
             return source, title
@@ -147,9 +167,10 @@ class Music(commands.Cog):
             if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
                 await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
 
-    @slash_command()
+    @slash_command(guild_only=True)
     async def play(self, ctx, query: str):
-        if not ctx.author.voice:
+        # Ensure we're in a guild and author is a Member
+        if not hasattr(ctx.author, 'voice') or not ctx.author.voice:
             await ctx.respond("Anda sedang tidak berada di voice channel.")
             return
         
@@ -177,7 +198,7 @@ class Music(commands.Cog):
         if not ctx.voice_client.is_playing():
             await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
 
-    @slash_command()
+    @slash_command(guild_only=True)
     async def stop(self, ctx):
         if ctx.voice_client:
             await ctx.voice_client.disconnect()
@@ -187,7 +208,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Bot tidak sedang berada di voice channel.")
 
-    @slash_command()
+    @slash_command(guild_only=True)
     async def skip(self, ctx):
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.stop()
@@ -195,7 +216,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Tidak ada lagu yang sedang diputar.")
 
-    @slash_command()
+    @slash_command(guild_only=True)
     async def pause(self, ctx):
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.pause()
@@ -203,7 +224,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Tidak ada lagu yang sedang diputar.")
 
-    @slash_command()
+    @slash_command(guild_only=True)
     async def resume(self, ctx):
         if ctx.voice_client and ctx.voice_client.is_paused():
             ctx.voice_client.resume()
@@ -211,7 +232,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Tidak ada lagu yang sedang diputar.")
 
-    @slash_command()
+    @slash_command(guild_only=True)
     async def queue(self, ctx):
         if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
             queue_list = []
@@ -225,7 +246,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Antrian kosong.")
 
-    @slash_command()
+    @slash_command(guild_only=True)
     async def shuffle(self, ctx):
         if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
             random.shuffle(self.music_queue[ctx.guild.id])
@@ -233,7 +254,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Antrian kosong.")
 
-    @slash_command()
+    @slash_command(guild_only=True)
     async def remove(self, ctx, position: int):
         if ctx.guild.id not in self.music_queue:
             self.music_queue[ctx.guild.id] = []
