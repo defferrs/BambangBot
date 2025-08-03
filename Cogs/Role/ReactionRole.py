@@ -17,6 +17,8 @@ class ReactionRole(commands.Cog):
     async def save_reaction_roles(self):
         while True:
             try:
+                # Ensure directory exists
+                os.makedirs("Cogs/Role/RoleData", exist_ok=True)
                 with open("Cogs/Role/RoleData/reaction_roles.json", "w") as f:
                     json.dump(self.reaction_roles, f)
                 await asyncio.sleep(60)
@@ -58,6 +60,9 @@ class ReactionRole(commands.Cog):
 
     def load_reaction_roles(self):
         try:
+            # Ensure directory exists
+            os.makedirs("Cogs/Role/RoleData", exist_ok=True)
+            
             if os.path.exists("Cogs/Role/RoleData/reaction_roles.json"):
                 with open("Cogs/Role/RoleData/reaction_roles.json", "r") as f:
                     content = f.read().strip()
