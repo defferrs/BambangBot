@@ -339,7 +339,7 @@ requires-dist = [
     { name = "opuslib", specifier = "==3.0.1" },
     { name = "py-cord", specifier = ">=2.4.0" },
     { name = "pyffmpeg", specifier = "==2.4.2.18.1" },
-    { name = "pynacl", specifier = ">=1.5.0" },
+    { name = "pynacl", extras = ["voice"], specifier = ">=1.5.0" },
     { name = "python-ffmpeg-video-streaming", specifier = "==0.1.16" },
     { name = "yt-dlp", specifier = ">=2023.12.30" },
 ]

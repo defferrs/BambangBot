@@ -7,6 +7,7 @@ import yt_dlp
 import re
 import os
 import subprocess
+import nacl
 
 class Music(commands.Cog):
     def __init__(self, bot):
@@ -277,12 +278,16 @@ class Music(commands.Cog):
             return
         
         # Handle voice connection
-        if not ctx.voice_client:
-            await ctx.author.voice.channel.connect()
-            await ctx.respond("Bot telah bergabung ke voice channel dan memproses lagu...")
-        else:
-            await ctx.voice_client.move_to(ctx.author.voice.channel)
-            await ctx.respond("Memproses lagu...")
+        try:
+            if not ctx.voice_client:
+                await ctx.author.voice.channel.connect()
+                await ctx.respond("Bot telah bergabung ke voice channel dan memproses lagu...")
+            else:
+                await ctx.voice_client.move_to(ctx.author.voice.channel)
+                await ctx.respond("Memproses lagu...")
+        except Exception as e:
+            await ctx.respond(f"Error connecting to voice channel: {str(e)}")
+            return
 
         if ctx.guild.id not in self.music_queue:
             self.music_queue[ctx.guild.id] = []

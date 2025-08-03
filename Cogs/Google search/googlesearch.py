@@ -21,5 +21,5 @@ class Search(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Search(bot))
-    print("Search cog loaded")t))
+    print("Search cog loaded")
     
