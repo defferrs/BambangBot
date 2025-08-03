@@ -51,10 +51,9 @@ class ReactionRole(commands.Cog):
                                                         if user != self.bot.user and role not in user.roles:
                                                             await user.add_roles(role)
                                                             print(f"Added role {role.name} to {user.name}")
-                await asyncio.sleep(30)  # Wait 30 seconds between checks
                                 except Exception as e:
                                     print(f"Error processing reaction role: {e}")
-                                await asyncio.sleep(1)
+                await asyncio.sleep(30)  # Wait 30 seconds between checks
                 print("Checked reaction roles")
             except Exception as e:
                 print(f"Error in check_reaction_roles: {e}")
