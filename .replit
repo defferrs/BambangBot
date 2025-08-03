@@ -1,15 +1,17 @@
 entrypoint = "main.py"
 modules = ["python-3.11"]
 
-[nix]
-channel = "stable-25_05"
-packages = ["libopus", "libsodium"]
 
 [unitTest]
 language = "python3"
 
 [gitHubImport]
 requiredFiles = [".replit", "replit.nix"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["libopus", "libsodium"]
+
 
 [deployment]
 run = ["python3", "main.py"]
