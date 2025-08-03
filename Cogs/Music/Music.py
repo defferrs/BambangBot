@@ -6,6 +6,9 @@ import random
 import ffmpeg
 import yt_dlp
 import pyffmpeg
+import PyNaCl
+import youtube_dl
+
 import re
 
 class Music(commands.Cog):
