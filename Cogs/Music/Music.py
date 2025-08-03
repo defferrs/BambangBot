@@ -4,6 +4,7 @@ from discord.commands import slash_command
 import asyncio
 import random
 import yt_dlp
+import pyffmpeg
 import re
 
 class Music(commands.Cog):
