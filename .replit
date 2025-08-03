@@ -1,6 +1,6 @@
 entrypoint = "main.py"
-modules = ["python-3.11"]
-
+modules = ["python-3.12"]
+audio = true
 
 [unitTest]
 language = "python3"
@@ -9,7 +9,7 @@ language = "python3"
 requiredFiles = [".replit", "replit.nix"]
 
 [nix]
-channel = "stable-25_05"
+channel = "stable-24_05"
 packages = ["libopus", "libsodium"]
 
 

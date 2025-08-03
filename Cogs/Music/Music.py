@@ -5,6 +5,8 @@ import asyncio
 import random
 import yt_dlp
 import re
+import os
+import subprocess
 
 class Music(commands.Cog):
     def __init__(self, bot):
@@ -13,6 +15,7 @@ class Music(commands.Cog):
         self.music_queue = {}
         self.play_next_song = asyncio.Event()
         self.play_next_song.set()
+        self.setup_audio_system()
         self.ytdl_format_options = {
             'format': 'bestaudio/best',
             'restrictfilenames': True,
@@ -27,15 +30,42 @@ class Music(commands.Cog):
         }
         self.ffmpeg_options = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-            'options': '-vn -f s16le'
+            'options': '-vn -ar 48000 -ac 2 -b:a 128k'
         }
         
         # Alternative options to try if default doesn't work
         self.ffmpeg_options_alt = {
             'before_options': '-nostdin',
-            'options': '-vn -ar 48000 -ac 2 -f s16le'
+            'options': '-vn -ar 48000 -ac 2 -f s16le -b:a 96k'
+        }
+        
+        # Last resort options
+        self.ffmpeg_options_minimal = {
+            'before_options': '-nostdin',
+            'options': '-vn'
         }
         self.ytdl = yt_dlp.YoutubeDL(self.ytdl_format_options)
+
+    def setup_audio_system(self):
+        """Setup audio system for Replit environment"""
+        try:
+            # Set up PulseAudio environment variables
+            os.environ['PULSE_RUNTIME_PATH'] = '/tmp/pulse'
+            os.environ['PULSE_STATE_PATH'] = '/tmp/pulse'
+            os.environ['PULSE_MACHINE_ID'] = '1234567890'
+            
+            # Try to start pulseaudio if not running
+            try:
+                subprocess.run(['pulseaudio', '--check'], check=True, capture_output=True)
+                print("PulseAudio is already running")
+            except subprocess.CalledProcessError:
+                print("Starting PulseAudio...")
+                subprocess.Popen(['pulseaudio', '--start', '--log-target=null'], 
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+            print("Audio system setup completed")
+        except Exception as e:
+            print(f"Audio system setup warning: {e}")
 
     def is_url(self, string):
         url_pattern = re.compile(
@@ -140,7 +170,16 @@ class Music(commands.Cog):
                     return source, title
                 except Exception as e2:
                     print(f"Alternative FFmpeg options also failed: {e2}")
-                    raise e2
+                    
+                    # Try minimal options as last resort
+                    try:
+                        print("Trying minimal FFmpeg options...")
+                        source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, before_options=self.ffmpeg_options_minimal['before_options'], options=self.ffmpeg_options_minimal['options']))
+                        print("Successfully created audio source with minimal options")
+                        return source, title
+                    except Exception as e3:
+                        print(f"All FFmpeg options failed: {e3}")
+                        raise e3
         except Exception as e:
             print(f"Error getting audio source: {str(e)}")
             import traceback
@@ -180,21 +219,30 @@ class Music(commands.Cog):
                 await ctx.followup.send("Voice client disconnected unexpectedly")
                 return
 
-            print(f"Starting playbook of: {title}")
+            print(f"Starting playback of: {title}")
             print(f"Voice client volume: {getattr(source, 'volume', 'No volume control')}")
             print(f"Voice client latency: {ctx.voice_client.latency}")
             
+            # Set volume to maximum for better audibility
+            if hasattr(source, 'volume'):
+                source.volume = 1.0
+                print("Set source volume to 1.0")
+            
             ctx.voice_client.play(source, after=after_playing)
             
-            # Wait a moment and check if it's actually playing
-            await asyncio.sleep(1)
-            is_playing = ctx.voice_client.is_playing()
-            print(f"Voice client is playing after 1 second: {is_playing}")
+            # Multiple checks to verify playback
+            for i in range(3):
+                await asyncio.sleep(1)
+                is_playing = ctx.voice_client.is_playing()
+                print(f"Voice client is playing after {i+1} second(s): {is_playing}")
+                if is_playing:
+                    break
             
             if not is_playing:
-                print("WARNING: Voice client reports not playing - there may be an audio issue")
-            
-            await ctx.followup.send(f"Now playing: {title}")
+                print("ERROR: Voice client reports not playing after 3 seconds - audio issue detected")
+                await ctx.followup.send(f"⚠️ Audio issue detected while playing: {title}")
+            else:
+                await ctx.followup.send(f"🎵 Now playing: {title}")
 
         except Exception as e:
             error_msg = str(e) if str(e) else "Unknown error occurred"
