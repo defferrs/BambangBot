@@ -74,7 +74,27 @@ class Music(commands.Cog):
             # Check if opus is loaded
             if not discord.opus.is_loaded():
                 print("Opus not loaded, trying to load...")
-                discord.opus.load_opus('opus')
+                # Try different opus library paths
+                opus_paths = [
+                    'libopus.so.0',
+                    'libopus.so', 
+                    '/nix/store/*/lib/libopus.so.0',
+                    'opus'
+                ]
+                
+                opus_loaded = False
+                for opus_path in opus_paths:
+                    try:
+                        discord.opus.load_opus(opus_path)
+                        print(f"Successfully loaded opus from: {opus_path}")
+                        opus_loaded = True
+                        break
+                    except Exception as e:
+                        print(f"Failed to load opus from {opus_path}: {e}")
+                        continue
+                
+                if not opus_loaded:
+                    print("WARNING: Could not load opus library - audio may not work properly")
             
             source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, **self.ffmpeg_options))
             return source, title
