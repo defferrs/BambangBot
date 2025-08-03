@@ -84,7 +84,7 @@ class ReactionRole(commands.Cog):
                     latest_message = message
                     break
                 else:
-                    await ctx.respond(f"No messages found in {channel.name}")
+                    await ctx.respond(f"No messages found in {channel.name}", ephemeral=True)
                     return
                 
                 guild_id_str = str(ctx.guild.id)
@@ -97,13 +97,13 @@ class ReactionRole(commands.Cog):
                 # Add the reaction to the message
                 await latest_message.add_reaction(emoji)
                 
-                await ctx.respond(f"Added reaction role {role.name} to the latest message in {channel.name} with emoji {emoji}")
+                await ctx.respond(f"Added reaction role {role.name} to the latest message in {channel.name} with emoji {emoji}", ephemeral=True)
                 print(f"Added reaction role {role.name} to message {latest_message.id} in channel {channel.name} with emoji {emoji}")
             except Exception as e:
-                await ctx.respond(f"Error setting up reaction role: {str(e)}")
+                await ctx.respond(f"Error setting up reaction role: {str(e)}", ephemeral=True)
                 print(f"Error in add_reaction_role: {e}")
         else:
-            await ctx.respond("You don't have permission to manage roles.")
+            await ctx.respond("You don't have permission to manage roles.", ephemeral=True)
 
     @slash_command()
     async def remove_reaction_role(self, ctx, role: discord.Role):
@@ -114,14 +114,14 @@ class ReactionRole(commands.Cog):
             if guild_id_str in self.reaction_roles:
                 if role_id_str in self.reaction_roles[guild_id_str]:
                     del self.reaction_roles[guild_id_str][role_id_str]
-                    await ctx.respond(f"Removed reaction role {role.name}")
+                    await ctx.respond(f"Removed reaction role {role.name}", ephemeral=True)
                     print(f"Removed reaction role {role.name}")
                 else:
-                    await ctx.respond(f"Reaction role {role.name} not found")
+                    await ctx.respond(f"Reaction role {role.name} not found", ephemeral=True)
             else:
-                await ctx.respond("No reaction roles found for this guild")
+                await ctx.respond("No reaction roles found for this guild", ephemeral=True)
         else:
-            await ctx.respond("You don't have permission to manage roles.")
+            await ctx.respond("You don't have permission to manage roles.", ephemeral=True)
 
     @slash_command()
     async def list_reaction_roles(self, ctx):
@@ -143,15 +143,15 @@ class ReactionRole(commands.Cog):
                                     embed.add_field(name=role.name, value=f"Message: {message.jump_url}\nEmoji: {emoji}", inline=False)
                         except Exception as e:
                             print(f"Error listing reaction role: {e}")
-                    await ctx.respond(embed=embed)
+                    await ctx.respond(embed=embed, ephemeral=True)
                     print(f"Listed reaction roles for guild {ctx.guild.name}")
                 else:
-                    await ctx.respond("No reaction roles found")
+                    await ctx.respond("No reaction roles found", ephemeral=True)
                     print("No reaction roles found")
             else:
-                await ctx.respond("No reaction roles found for this guild")
+                await ctx.respond("No reaction roles found for this guild", ephemeral=True)
         else:
-            await ctx.respond("You don't have permission to manage roles.")
+            await ctx.respond("You don't have permission to manage roles.", ephemeral=True)
 
 def setup(bot):
     bot.add_cog(ReactionRole(bot))
