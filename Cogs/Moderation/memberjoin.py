@@ -214,12 +214,12 @@ class memberjoin(commands.Cog):
         
         await ctx.respond(embed=embed, ephemeral=True)
 
-    @slash_command()
+    @slash_command(name="member_count")
     async def membercount(self, ctx):
         """Get the current member count"""
         await ctx.respond(f"This server has {ctx.guild.member_count} members")
 
-    @slash_command()
+    @slash_command(name="member_settings")
     @commands.has_permissions(manage_guild=True)
     async def view_settings(self, ctx):
         """View current member join/leave settings"""

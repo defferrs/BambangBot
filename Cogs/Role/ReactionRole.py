@@ -21,13 +21,14 @@ class ReactionRole(commands.Cog):
                 os.makedirs("Cogs/Role/RoleData", exist_ok=True)
                 with open("Cogs/Role/RoleData/reaction_roles.json", "w") as f:
                     json.dump(self.reaction_roles, f)
-                await asyncio.sleep(60)
-                print("Reaction roles saved")
+                await asyncio.sleep(300)  # Save every 5 minutes instead of 1
+                # Removed frequent logging
             except Exception as e:
                 print(f"Error saving reaction roles: {e}")
                 await asyncio.sleep(60)
 
     async def check_reaction_roles(self):
+        await asyncio.sleep(10)  # Initial delay
         while True:
             try:
                 for guild_id_str, roles in self.reaction_roles.items():
@@ -50,6 +51,7 @@ class ReactionRole(commands.Cog):
                                                         if user != self.bot.user and role not in user.roles:
                                                             await user.add_roles(role)
                                                             print(f"Added role {role.name} to {user.name}")
+                await asyncio.sleep(30)  # Wait 30 seconds between checks
                                 except Exception as e:
                                     print(f"Error processing reaction role: {e}")
                                 await asyncio.sleep(1)
