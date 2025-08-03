@@ -4,8 +4,6 @@ from discord.commands import slash_command
 import asyncio
 import random
 import yt_dlp
-import ffmpeg
-import pyffmpeg
 import re
 
 class Music(commands.Cog):
@@ -17,7 +15,6 @@ class Music(commands.Cog):
         self.play_next_song.set()
         self.ytdl_format_options = {
             'format': 'bestaudio/best',
-            'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
             'restrictfilenames': True,
             'noplaylist': True,
             'nocheckcertificate': True,
@@ -26,14 +23,11 @@ class Music(commands.Cog):
             'quiet': True,
             'no_warnings': True,
             'default_search': 'ytsearch',
-            'source_address': '0.0.0.0',
-            'extractaudio': True,
-            'audioformat': 'mp3',
-            'age_limit': 21
+            'source_address': '0.0.0.0'
         }
         self.ffmpeg_options = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-            'options': '-vn -filter:a "volume=0.5"'
+            'options': '-vn'
         }
         self.ytdl = yt_dlp.YoutubeDL(self.ytdl_format_options)
 
@@ -97,7 +91,9 @@ class Music(commands.Cog):
 
             def after_playing(error):
                 if error:
-                    print(f'Player error: {error}')
+                    print(f'Player error: {str(error)}')
+                else:
+                    print('Song finished playing')
                 self.bot.loop.call_soon_threadsafe(self.play_next_song.set)
 
             ctx.voice_client.play(source, after=after_playing)
@@ -115,8 +111,9 @@ class Music(commands.Cog):
                 if ctx.voice_client:
                     await ctx.voice_client.disconnect()
         except Exception as e:
-            print(f"Error playing song: {str(e)}")
-            await ctx.followup.send(f"Error playing song: {str(e)}")
+            error_msg = str(e) if str(e) else "Unknown error occurred"
+            print(f"Error playing song: {error_msg}")
+            await ctx.followup.send(f"Error playing song: {error_msg}")
             if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
                 await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
 
