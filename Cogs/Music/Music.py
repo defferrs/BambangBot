@@ -3,12 +3,7 @@ from discord.ext import commands
 from discord.commands import slash_command
 import asyncio
 import random
-import ffmpeg
 import yt_dlp
-import pyffmpeg
-import PyNaCl
-import youtube_dl
-
 import re
 
 class Music(commands.Cog):
@@ -28,12 +23,15 @@ class Music(commands.Cog):
             'logtostderr': False,
             'quiet': True,
             'no_warnings': True,
-            'default_search': 'auto',
-            'source_address': '0.0.0.0'
+            'default_search': 'ytsearch',
+            'source_address': '0.0.0.0',
+            'extractaudio': True,
+            'audioformat': 'mp3',
+            'age_limit': 21
         }
         self.ffmpeg_options = {
-            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-            'options': '-vn'
+            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
+            'options': '-vn -filter:a "volume=0.5"'
         }
         self.ytdl = yt_dlp.YoutubeDL(self.ytdl_format_options)
 
@@ -90,15 +88,19 @@ class Music(commands.Cog):
                 query = song_info
 
             if not source:
-                await ctx.respond(f"Could not find or play: {query}")
+                await ctx.followup.send(f"Could not find or play: {query}")
                 if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
                     await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
                 return
 
-            ctx.voice_client.play(source, after=lambda e: self.bot.loop.call_soon_threadsafe(self.play_next_song.set))
-            source.volume = 0.5
+            def after_playing(error):
+                if error:
+                    print(f'Player error: {error}')
+                self.bot.loop.call_soon_threadsafe(self.play_next_song.set)
 
-            await ctx.respond(f"Now playing: {title}")
+            ctx.voice_client.play(source, after=after_playing)
+
+            await ctx.followup.send(f"Now playing: {title}")
 
             await self.play_next_song.wait()
             self.play_next_song.clear()
@@ -111,7 +113,8 @@ class Music(commands.Cog):
                 if ctx.voice_client:
                     await ctx.voice_client.disconnect()
         except Exception as e:
-            await ctx.respond(f"Error playing song: {str(e)}")
+            print(f"Error playing song: {str(e)}")
+            await ctx.followup.send(f"Error playing song: {str(e)}")
             if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
                 await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
 
