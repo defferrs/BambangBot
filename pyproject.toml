@@ -21,4 +21,5 @@ dependencies = [
     "ffmpeg-normalize==1.30.0",
     "opuslib==3.0.1",
     "opusfc==1.4.0",
+    "ffmpeg-python>=0.2.0",
 ]
