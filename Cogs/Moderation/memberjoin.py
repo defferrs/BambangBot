@@ -211,9 +211,9 @@ class memberjoin(commands.Cog):
     @slash_command()
     @commands.has_permissions(manage_guild=True)
     async def setup_goodbye(self, ctx,
-                           enabled: Option(bool, "Aktifkan pesan perpisahan", default=True),
                            channel: Option(discord.TextChannel, "Channel guild untuk pesan perpisahan", required=False) = None,
-                           goodbye_message: Option(str, "Pesan perpisahan kustom untuk channel guild (gunakan {member})", required=False) = None):
+                           goodbye_message: Option(str, "Pesan perpisahan kustom untuk channel guild (gunakan {member})", required=False) = None,
+                           enabled: Option(bool, "Aktifkan pesan perpisahan", default=True)):
         """Konfigurasi pesan perpisahan untuk member yang keluar di channel guild"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
