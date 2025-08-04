@@ -11,98 +11,98 @@ class Moderation(commands.Cog):
         self.bot = bot
 
 
-    @slash_command()  # Remove guild_ids to make it global
+    @slash_command(description="Hapus sejumlah pesan di channel ini")
     @commands.has_permissions(manage_messages = True)
-    async def clear(self, ctx, amount: Option(int)):    
-        await ctx.channel.purge(limit = amount)#Get the channel where the command is executed, then purge no. of messages provided
-        await ctx.respond("Done.")#respond because in slash commands the response shows a little reply thing on top, for that you need ctx.respond
+    async def clear(self, ctx, amount: Option(int, "Jumlah pesan yang akan dihapus")):    
+        await ctx.channel.purge(limit = amount)
+        await ctx.respond(f"✅ Berhasil menghapus {amount} pesan dari channel ini.")
     
     
-    @slash_command()
+    @slash_command(description="Keluarkan member dari server")
     @commands.has_permissions(kick_members = True)
-    async def kick(self, ctx,  member: Option(discord.Member)):
+    async def kick(self, ctx, member: Option(discord.Member, "Member yang akan dikeluarkan")):
     
-        await member.kick(reason=None)#kick th member with no reason. you can add another option with "str" as the first param   
-        await ctx.respond("Done.")
+        await member.kick(reason=None)
+        await ctx.respond(f"✅ {member.mention} telah dikeluarkan dari server.")
     
     
-    @slash_command()
+    @slash_command(description="Banned member dari server secara permanen")
     @commands.has_permissions(ban_members = True)
-    async def ban(self, ctx, member: Option(discord.Member)):
+    async def ban(self, ctx, member: Option(discord.Member, "Member yang akan di-ban")):
     
-        await member.ban(reason=None, delete_message_days=0)#ban and dont delete any messages
-        await ctx.respond("Done.")    
+        await member.ban(reason=None, delete_message_days=0)
+        await ctx.respond(f"🔨 {member.mention} telah di-ban dari server secara permanen.")    
 
 
-    @commands.command()#Because unban doesnt work with slash commands
+    @commands.command(description="Batalkan ban member dengan ID")
     @commands.has_permissions(ban_members = True)
     async def unban(self, ctx, *, member_id: int):
         
         user = await self.bot.fetch_user(member_id)
         await ctx.guild.unban(user, reason=None)
-        await ctx.send("Done.")
+        await ctx.send(f"✅ {user.mention} telah di-unban dari server.")
     
-    @slash_command()
+    @slash_command(description="Bisu member di server (memerlukan role 'Muted')")
     @commands.has_permissions(manage_roles = True)
-    async def mute(self, ctx, member: Option(discord.Member)):
+    async def mute(self, ctx, member: Option(discord.Member, "Member yang akan dibisu")):
         muted_role = ctx.guild.get_role(1234567890)#get the muted role with ID - UPDATE THIS WITH YOUR ACTUAL ROLE ID
         
         if not muted_role:
-            await ctx.respond("Muted role not found! Please check the role ID.")
+            await ctx.respond("🚫 Role 'Muted' tidak ditemukan! Silakan periksa ID role.")
             return
     
-        await member.add_roles(muted_role)#add the mute role
+        await member.add_roles(muted_role)
     
-        await ctx.respond("The member has been muted")
+        await ctx.respond(f"🔇 {member.mention} telah dibisu di server.")
 
 
-    @slash_command()
+    @slash_command(description="Batalkan bisu member di server")
     @commands.has_permissions(manage_roles = True)
-    async def unmute(self, ctx, member: Option(discord.Member)):
+    async def unmute(self, ctx, member: Option(discord.Member, "Member yang akan dibatalkan bisuannya")):
         muted_role = ctx.guild.get_role(1234567890)#get the muted role with ID - UPDATE THIS WITH YOUR ACTUAL ROLE ID
         
         if not muted_role:
-            await ctx.respond("Muted role not found! Please check the role ID.")
+            await ctx.respond("🚫 Role 'Muted' tidak ditemukan! Silakan periksa ID role.")
             return
     
-        await member.remove_roles(muted_role)#remove muted role
+        await member.remove_roles(muted_role)
     
-        await ctx.respond("The member has been unmuted")                                                   
+        await ctx.respond(f"🔊 {member.mention} telah dibatalkan bisuannya.")                                                   
                                                  
 
     # membercount command moved to memberjoin.py to avoid duplicates
 	
-    @slash_command()
-    async def timeout(self, ctx, member: Option(discord.Member), minutes: Option(int)):
+    @slash_command(description="Berikan timeout kepada member untuk waktu tertentu")
+    async def timeout(self, ctx, member: Option(discord.Member, "Member yang akan di-timeout"), minutes: Option(int, "Durasi timeout dalam menit")):
         """Apply a timeout to a member"""
 
         duration = datetime.timedelta(minutes=minutes)
-        await member.timeout_for(duration)#timeout for the amount of time given, then remove timeout
-        await ctx.reply(f"Member timed out for {minutes} minutes.")	
+        await member.timeout_for(duration)
+        await ctx.respond(f"⏰ {member.mention} telah di-timeout selama {minutes} menit.")	
 
 
 #Warn command section(it is still in the same class)-----------------------------------------------------
 
-    @slash_command()    
-    async def warnings(self, ctx, member: Option(discord.Member)):
+    @slash_command(description="Lihat jumlah peringatan member")    
+    async def warnings(self, ctx, member: Option(discord.Member, "Member yang akan dilihat peringatannya")):
         await self.open_account(member)
 
         users = await self.get_user_data()
 
         warns = users[str(member.id)]["warns"]
 
-        await ctx.respond(f"{member.name} has {warns} warns.")
+        await ctx.respond(f"⚠️ {member.mention} memiliki {warns} peringatan.")
 
-    @slash_command()    
+    @slash_command(description="Berikan peringatan kepada member")    
     @commands.has_permissions(kick_members = True)
-    async def warn(self, ctx, member: Option(discord.Member)):
+    async def warn(self, ctx, member: Option(discord.Member, "Member yang akan diberi peringatan")):
         await self.open_account(member)
 
         users = await self.get_user_data()
 
         warns = await self.add_warn(member)
 
-        await ctx.respond(f"<@{member.id}> has been warned. They now have {warns} warns.")
+        await ctx.respond(f"⚠️ {member.mention} telah diberi peringatan. Total peringatan: {warns}.")
 	
 	
     async def open_account(self, user):

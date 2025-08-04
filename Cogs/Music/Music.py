@@ -270,8 +270,8 @@ class Music(commands.Cog):
         except Exception as e:
             print(f"Error handling next song: {e}")
 
-    @slash_command(contexts={discord.InteractionContextType.guild})
-    async def play(self, ctx, query: str):
+    @slash_command(description="Putar musik dari YouTube atau URL", contexts={discord.InteractionContextType.guild})
+    async def play(self, ctx, query: Option(str, "Nama lagu atau URL YouTube")):
         # Ensure we're in a guild and author is a Member
         if not hasattr(ctx.author, 'voice') or not ctx.author.voice:
             await ctx.respond("Anda sedang tidak berada di voice channel.", ephemeral=True)
@@ -305,7 +305,7 @@ class Music(commands.Cog):
         if not ctx.voice_client.is_playing():
             await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
 
-    @slash_command(contexts={discord.InteractionContextType.guild})
+    @slash_command(description="Hentikan musik dan keluar dari voice channel", contexts={discord.InteractionContextType.guild})
     async def stop(self, ctx):
         if ctx.voice_client:
             await ctx.voice_client.disconnect()
@@ -315,7 +315,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Bot tidak sedang berada di voice channel.")
 
-    @slash_command(contexts={discord.InteractionContextType.guild})
+    @slash_command(description="Lewati lagu yang sedang diputar", contexts={discord.InteractionContextType.guild})
     async def skip(self, ctx):
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.stop()
@@ -323,7 +323,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Tidak ada lagu yang sedang diputar.")
 
-    @slash_command(contexts={discord.InteractionContextType.guild})
+    @slash_command(description="Jeda lagu yang sedang diputar", contexts={discord.InteractionContextType.guild})
     async def pause(self, ctx):
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.pause()
@@ -331,7 +331,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Tidak ada lagu yang sedang diputar.")
 
-    @slash_command(contexts={discord.InteractionContextType.guild})
+    @slash_command(description="Lanjutkan lagu yang dijeda", contexts={discord.InteractionContextType.guild})
     async def resume(self, ctx):
         if ctx.voice_client and ctx.voice_client.is_paused():
             ctx.voice_client.resume()
@@ -339,7 +339,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Tidak ada lagu yang sedang diputar.")
 
-    @slash_command(contexts={discord.InteractionContextType.guild})
+    @slash_command(description="Tampilkan daftar antrian musik", contexts={discord.InteractionContextType.guild})
     async def queue(self, ctx):
         if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
             queue_list = []
@@ -353,7 +353,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Antrian kosong.")
 
-    @slash_command(contexts={discord.InteractionContextType.guild})
+    @slash_command(description="Acak urutan antrian musik", contexts={discord.InteractionContextType.guild})
     async def shuffle(self, ctx):
         if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
             random.shuffle(self.music_queue[ctx.guild.id])
@@ -361,8 +361,8 @@ class Music(commands.Cog):
         else:
             await ctx.respond("Antrian kosong.")
 
-    @slash_command(contexts={discord.InteractionContextType.guild})
-    async def remove(self, ctx, position: int):
+    @slash_command(description="Hapus lagu dari antrian berdasarkan posisi", contexts={discord.InteractionContextType.guild})
+    async def remove(self, ctx, position: Option(int, "Posisi lagu dalam antrian yang akan dihapus")):
         if ctx.guild.id not in self.music_queue:
             self.music_queue[ctx.guild.id] = []
 

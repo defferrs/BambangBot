@@ -9,12 +9,12 @@ class Search(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @slash_command()  # Remove guild_ids to make it global, or add your actual guild IDs
-    async def search(self, ctx, query: Option(str)):
-        msg = await ctx.respond(f"Searching...🔍")
-        embed = discord.Embed(title=f"Search results", description=f"Query: {query}")
-        for j in search(query, num=5, stop=5, pause=2):#increase num and stop for the amount of results you want
-            embed.add_field(name="Search result:", value=j)
+    @slash_command(description="Cari informasi di Google")
+    async def search(self, ctx, query: Option(str, "Kata kunci pencarian")):
+        msg = await ctx.respond(f"Mencari informasi...🔍")
+        embed = discord.Embed(title=f"Hasil Pencarian Google", description=f"Pencarian: {query}", color=discord.Color.blue())
+        for j in search(query, num=5, stop=5, pause=2):
+            embed.add_field(name="Hasil:", value=j, inline=False)
         await msg.edit(embed=embed)
 
 

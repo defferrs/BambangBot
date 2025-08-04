@@ -1,4 +1,3 @@
-
 import discord
 from discord.ext import commands
 from discord.commands import slash_command
@@ -63,7 +62,7 @@ class ReactionRole(commands.Cog):
         try:
             # Ensure directory exists
             os.makedirs("Cogs/Role/RoleData", exist_ok=True)
-            
+
             if os.path.exists("Cogs/Role/RoleData/reaction_roles.json"):
                 with open("Cogs/Role/RoleData/reaction_roles.json", "r") as f:
                     content = f.read().strip()
@@ -78,11 +77,19 @@ class ReactionRole(commands.Cog):
         except Exception as e:
             print(f"Error loading reaction roles: {e}")
             self.reaction_roles = {}
-        
+
         self.bot.loop.create_task(self.check_reaction_roles())
 
-    @slash_command()
+    @slash_command(description="Menambahkan reaction role ke pesan terbaru di channel.")
     async def add_reaction_role(self, ctx, role: discord.Role, channel: discord.TextChannel, emoji: str):
+        """Menambahkan reaction role ke pesan terbaru di channel.
+
+        Args:
+            ctx (commands.Context): Konteks perintah.
+            role (discord.Role): Role yang akan diberikan.
+            channel (discord.TextChannel): Channel tempat pesan berada.
+            emoji (str): Emoji yang akan digunakan sebagai reaction.
+        """
         if ctx.author.guild_permissions.manage_roles:
             try:
                 # Get the latest message from the channel
@@ -90,47 +97,54 @@ class ReactionRole(commands.Cog):
                     latest_message = message
                     break
                 else:
-                    await ctx.respond(f"No messages found in {channel.name}", ephemeral=True)
+                    await ctx.respond(f"Tidak ada pesan ditemukan di {channel.name}", ephemeral=True)
                     return
-                
+
                 guild_id_str = str(ctx.guild.id)
                 role_id_str = str(role.id)
-                
+
                 if guild_id_str not in self.reaction_roles:
                     self.reaction_roles[guild_id_str] = {}
                 self.reaction_roles[guild_id_str][role_id_str] = [channel.id, latest_message.id, emoji]
-                
+
                 # Add the reaction to the message
                 await latest_message.add_reaction(emoji)
-                
-                await ctx.respond(f"Added reaction role {role.name} to the latest message in {channel.name} with emoji {emoji}", ephemeral=True)
+
+                await ctx.respond(f"Berhasil menambahkan reaction role {role.name} ke pesan terbaru di {channel.name} dengan emoji {emoji}", ephemeral=True)
                 print(f"Added reaction role {role.name} to message {latest_message.id} in channel {channel.name} with emoji {emoji}")
             except Exception as e:
                 await ctx.respond(f"Error setting up reaction role: {str(e)}", ephemeral=True)
                 print(f"Error in add_reaction_role: {e}")
         else:
-            await ctx.respond("You don't have permission to manage roles.", ephemeral=True)
+            await ctx.respond("🚫 Anda tidak memiliki izin untuk mengelola role.", ephemeral=True)
 
-    @slash_command()
+    @slash_command(description="Menghapus reaction role dari role tertentu.")
     async def remove_reaction_role(self, ctx, role: discord.Role):
+        """Menghapus reaction role dari role tertentu.
+
+        Args:
+            ctx (commands.Context): Konteks perintah.
+            role (discord.Role): Role yang akan dihapus reaction rolenya.
+        """
         if ctx.author.guild_permissions.manage_roles:
             guild_id_str = str(ctx.guild.id)
             role_id_str = str(role.id)
-            
+
             if guild_id_str in self.reaction_roles:
                 if role_id_str in self.reaction_roles[guild_id_str]:
                     del self.reaction_roles[guild_id_str][role_id_str]
-                    await ctx.respond(f"Removed reaction role {role.name}", ephemeral=True)
+                    await ctx.respond(f"Berhasil menghapus reaction role {role.name}", ephemeral=True)
                     print(f"Removed reaction role {role.name}")
                 else:
-                    await ctx.respond(f"Reaction role {role.name} not found", ephemeral=True)
+                    await ctx.respond(f"Reaction role {role.name} tidak ditemukan", ephemeral=True)
             else:
-                await ctx.respond("No reaction roles found for this guild", ephemeral=True)
+                await ctx.respond("Tidak ada reaction role ditemukan untuk guild ini", ephemeral=True)
         else:
-            await ctx.respond("You don't have permission to manage roles.", ephemeral=True)
+            await ctx.respond("🚫 Anda tidak memiliki izin untuk mengelola role.", ephemeral=True)
 
-    @slash_command()
+    @slash_command(description="Menampilkan daftar reaction role yang ada di guild ini.")
     async def list_reaction_roles(self, ctx):
+        """Menampilkan daftar reaction role yang ada di guild ini."""
         if ctx.author.guild_permissions.manage_roles:
             guild_id_str = str(ctx.guild.id)
             if guild_id_str in self.reaction_roles:
@@ -146,18 +160,18 @@ class ReactionRole(commands.Cog):
                                 channel = ctx.guild.get_channel(channel_id)
                                 if channel:
                                     message = await channel.fetch_message(message_id)
-                                    embed.add_field(name=role.name, value=f"Message: {message.jump_url}\nEmoji: {emoji}", inline=False)
+                                    embed.add_field(name=role.name, value=f"Pesan: {message.jump_url}\nEmoji: {emoji}", inline=False)
                         except Exception as e:
                             print(f"Error listing reaction role: {e}")
                     await ctx.respond(embed=embed, ephemeral=True)
                     print(f"Listed reaction roles for guild {ctx.guild.name}")
                 else:
-                    await ctx.respond("No reaction roles found", ephemeral=True)
+                    await ctx.respond("Tidak ada reaction role ditemukan", ephemeral=True)
                     print("No reaction roles found")
             else:
-                await ctx.respond("No reaction roles found for this guild", ephemeral=True)
+                await ctx.respond("Tidak ada reaction role ditemukan untuk guild ini", ephemeral=True)
         else:
-            await ctx.respond("You don't have permission to manage roles.", ephemeral=True)
+            await ctx.respond("🚫 Anda tidak memiliki izin untuk mengelola role.", ephemeral=True)
 
 def setup(bot):
     bot.add_cog(ReactionRole(bot))
