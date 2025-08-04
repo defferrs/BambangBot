@@ -177,10 +177,10 @@ class memberjoin(commands.Cog):
     async def setup_welcome(self, ctx, 
                            dm_enabled: Option(bool, "Aktifkan DM selamat datang untuk member baru", default=False),
                            channel_enabled: Option(bool, "Aktifkan pesan selamat datang di channel guild", default=True),
-                           role: Option(discord.Role, "Role otomatis yang akan diberikan", required=False),
-                           channel: Option(discord.TextChannel, "Channel guild untuk pesan selamat datang", required=False),
+                           role: discord.Role = Option(None, "Role otomatis yang akan diberikan", required=False),
+                           channel: discord.TextChannel = Option(None, "Channel guild untuk pesan selamat datang", required=False),
                            auto_nickname: Option(bool, "Aktifkan nickname otomatis", default=True),
-                           welcome_message: Option(str, "Pesan selamat datang kustom (gunakan {member} dan {guild})", required=False)):
+                           welcome_message: str = Option(None, "Pesan selamat datang kustom (gunakan {member} dan {guild})", required=False)):
         """Konfigurasi lengkap pengaturan selamat datang untuk member baru"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
@@ -212,8 +212,8 @@ class memberjoin(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def setup_goodbye(self, ctx,
                            enabled: Option(bool, "Aktifkan pesan perpisahan"),
-                           channel: Option(discord.TextChannel, "Channel guild untuk pesan perpisahan", required=False),
-                           goodbye_message: Option(str, "Pesan perpisahan kustom untuk channel guild (gunakan {member})", required=False)):
+                           channel: discord.TextChannel = Option(None, "Channel guild untuk pesan perpisahan", required=False),
+                           goodbye_message: str = Option(None, "Pesan perpisahan kustom untuk channel guild (gunakan {member})", required=False)):
         """Konfigurasi pesan perpisahan untuk member yang keluar di channel guild"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
