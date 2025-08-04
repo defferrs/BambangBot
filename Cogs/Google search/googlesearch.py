@@ -21,10 +21,11 @@ class Search(commands.Cog):
         
         try:
             results = []
-            search_results = search(query, num_results=5, lang='id', advanced=True, sleep_interval=1)
+            # Use simple search without advanced parameters
+            search_results = search(query, num=5, stop=5, pause=2)
             
             for result in search_results:
-                results.append(result)
+                results.append(str(result))
                 if len(results) >= 5:
                     break
 
@@ -37,10 +38,11 @@ class Search(commands.Cog):
             else:
                 for i, result in enumerate(results, 1):
                     # Truncate long URLs for better display
-                    display_url = result if len(result) <= 100 else result[:97] + "..."
+                    result_str = str(result)
+                    display_url = result_str if len(result_str) <= 100 else result_str[:97] + "..."
                     embed.add_field(
                         name=f"🔗 Hasil {i}", 
-                        value=f"[Klik untuk membuka]({result})\n`{display_url}`", 
+                        value=f"[Klik untuk membuka]({result_str})\n`{display_url}`", 
                         inline=False
                     )
                     
