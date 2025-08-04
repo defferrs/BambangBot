@@ -133,49 +133,7 @@ class memberjoin(commands.Cog):
             except Exception as e:
                 print(f"Error sending welcome message: {e}")
 
-    @commands.Cog.listener()
-    async def on_message_edit(self, before, after):
-        """Handle message edits to update welcome messages"""
-        # Only process if the message was edited by someone with manage_guild permissions
-        if not after.author.guild_permissions.manage_guild:
-            return
-        
-        # Check if this message is in a welcome channel
-        guild_settings = self.get_guild_settings(after.guild.id)
-        welcome_channel_id = guild_settings.get("welcome_channel")
-        
-        if not welcome_channel_id or after.channel.id != welcome_channel_id:
-            return
-        
-        # Check if the bot sent this message and it's a template message
-        if after.author != self.bot.user:
-            return
-        
-        # Check if this is a template message by looking for the footer
-        if not after.embeds or not after.embeds[0].footer or "editable template" not in after.embeds[0].footer.text.lower():
-            return
-        
-        # Update the welcome message template based on the edit
-        embed = after.embeds[0]
-        if embed.description:
-            # Replace @SampleUser with {member} placeholder for template
-            import re
-            new_message = embed.description
-            new_message = re.sub(r'@SampleUser', '{member}', new_message)
-            new_message = re.sub(r'<@!?\d+>', '{member}', new_message)
-            
-            if new_message != guild_settings["welcome_message"]:
-                guild_settings["welcome_message"] = new_message
-                self.save_settings()
-                
-                # Send confirmation
-                try:
-                    confirmation = await after.channel.send(
-                        f"✅ Welcome message template updated! New members will see:\n```{new_message}```",
-                        delete_after=10
-                    )
-                except:
-                    pass
+    
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
@@ -337,62 +295,67 @@ class memberjoin(commands.Cog):
         
         await ctx.respond(embed=embed, ephemeral=True)
 
-    @slash_command(name="edit_welcome_template")
+    @slash_command(name="edit_welcome_message")
     @commands.has_permissions(manage_guild=True)
-    async def edit_welcome_template(self, ctx):
-        """Send an editable welcome message template that you can modify directly"""
+    async def edit_welcome_message(self, ctx):
+        """Edit the welcome message template using a text input modal"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
-        welcome_channel_id = guild_settings["welcome_channel"]
-        welcome_channel = None
-        
-        if welcome_channel_id:
-            welcome_channel = ctx.guild.get_channel(welcome_channel_id)
-        
-        if not welcome_channel:
-            welcome_channel = ctx.guild.system_channel
+        class WelcomeMessageModal(discord.ui.Modal):
+            def __init__(self):
+                super().__init__(title="Edit Welcome Message")
+                
+                self.message_input = discord.ui.InputText(
+                    label="Welcome Message",
+                    placeholder="Enter your welcome message here...",
+                    value=guild_settings["welcome_message"],
+                    style=discord.InputTextStyle.paragraph,
+                    max_length=1000
+                )
+                self.add_item(self.message_input)
+                
+                self.tips_input = discord.ui.InputText(
+                    label="Tips (Read Only)",
+                    placeholder="Use {member} for user mention, {guild} for server name",
+                    value="Use {member} for user mention, {guild} for server name",
+                    style=discord.InputTextStyle.short,
+                    required=False
+                )
+                self.add_item(self.tips_input)
             
-        if not welcome_channel:
-            await ctx.respond("❌ No welcome channel configured and no system channel available!", ephemeral=True)
-            return
+            async def callback(self, interaction):
+                new_message = self.message_input.value
+                
+                if not new_message.strip():
+                    await interaction.response.send_message("❌ Welcome message cannot be empty!", ephemeral=True)
+                    return
+                
+                # Update the settings
+                guild_settings["welcome_message"] = new_message
+                self.parent.save_settings()
+                
+                # Show preview
+                preview_message = new_message.format(
+                    member="@SampleUser",
+                    guild=interaction.guild.name
+                )
+                
+                embed = discord.Embed(
+                    title="✅ Welcome Message Updated!",
+                    description=f"**Preview:**\n{preview_message}",
+                    color=discord.Color.green()
+                )
+                embed.add_field(
+                    name="📝 New Template",
+                    value=f"`{new_message}`",
+                    inline=False
+                )
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
         
-        # Create a sample welcome message that can be edited
-        sample_message = guild_settings["welcome_message"].format(
-            member="@SampleUser",
-            guild=ctx.guild.name
-        )
-        
-        embed = discord.Embed(
-            title="🎨 Welcome Template Editor",
-            description=sample_message,
-            color=discord.Color.blue()
-        )
-        embed.add_field(
-            name="📝 How to Edit",
-            value="1. Click the **Edit Message** button (three dots)\n"
-                  "2. Modify the description text above\n"
-                  "3. Keep `@SampleUser` as placeholder for new members\n"
-                  "4. Changes will be saved automatically!",
-            inline=False
-        )
-        embed.add_field(
-            name="💡 Tips",
-            value="• Use `{member}` in your template for member mentions\n"
-                  "• Use `{guild}` for server name\n"
-                  "• Current template will be used for new members",
-            inline=False
-        )
-        embed.set_footer(text="Editable template message - Edit this directly!")
-        
-        try:
-            template_msg = await welcome_channel.send(embed=embed)
-            await ctx.respond(
-                f"✅ Editable welcome template sent to {welcome_channel.mention}!\n"
-                f"Edit the message description directly to update the template.",
-                ephemeral=True
-            )
-        except Exception as e:
-            await ctx.respond(f"❌ Error sending template: {e}", ephemeral=True)
+        modal = WelcomeMessageModal()
+        modal.parent = self
+        await ctx.send_modal(modal)
 
     @slash_command(name="sync_commands")
     @commands.has_permissions(administrator=True)
