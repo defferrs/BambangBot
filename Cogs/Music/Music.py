@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord.commands import slash_command
+from discord.commands import slash_command, Option
 import asyncio
 import random
 import yt_dlp
