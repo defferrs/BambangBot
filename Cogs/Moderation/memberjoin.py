@@ -122,6 +122,51 @@ class memberjoin(commands.Cog):
                 print(f"Error sending welcome message: {e}")
 
     @commands.Cog.listener()
+    async def on_message_edit(self, before, after):
+        """Handle message edits to update welcome messages"""
+        # Only process if the message was edited by someone with manage_guild permissions
+        if not after.author.guild_permissions.manage_guild:
+            return
+        
+        # Check if this message is in a welcome channel
+        guild_settings = self.get_guild_settings(after.guild.id)
+        welcome_channel_id = guild_settings.get("welcome_channel")
+        
+        if not welcome_channel_id or after.channel.id != welcome_channel_id:
+            return
+        
+        # Check if the bot sent this message (welcome message)
+        if after.author != self.bot.user:
+            return
+        
+        # Update the welcome message template based on the edit
+        # Extract the new message content from the embed description if it's an embed
+        new_message = ""
+        if after.embeds:
+            embed = after.embeds[0]
+            if embed.description:
+                # Remove the mention and extract the template
+                description = embed.description
+                # Replace mention pattern with {member} placeholder
+                import re
+                new_message = re.sub(r'<@!?\d+>', '{member}', description)
+        else:
+            new_message = after.content
+        
+        if new_message and new_message != guild_settings["welcome_message"]:
+            guild_settings["welcome_message"] = new_message
+            self.save_settings()
+            
+            # Send confirmation to the editor
+            try:
+                await after.channel.send(
+                    f"✅ Welcome message template updated by {after.author.mention}!",
+                    delete_after=5
+                )
+            except:
+                pass
+
+    @commands.Cog.listener()
     async def on_member_remove(self, member):
         """Handle member leave events"""
         guild_settings = self.get_guild_settings(member.guild.id)
@@ -280,6 +325,50 @@ class memberjoin(commands.Cog):
             embed.add_field(name="Custom Message", value=welcome_message, inline=False)
         
         await ctx.respond(embed=embed, ephemeral=True)
+
+    @slash_command(name="edit_welcome_template")
+    @commands.has_permissions(manage_guild=True)
+    async def edit_welcome_template(self, ctx):
+        """Send an editable welcome message template that you can modify directly"""
+        guild_settings = self.get_guild_settings(ctx.guild.id)
+        
+        welcome_channel_id = guild_settings["welcome_channel"]
+        welcome_channel = None
+        
+        if welcome_channel_id:
+            welcome_channel = ctx.guild.get_channel(welcome_channel_id)
+        
+        if not welcome_channel:
+            welcome_channel = ctx.guild.system_channel
+            
+        if not welcome_channel:
+            await ctx.respond("No welcome channel configured and no system channel available!", ephemeral=True)
+            return
+        
+        # Create a sample welcome message that can be edited
+        sample_message = guild_settings["welcome_message"].format(
+            member="@SampleUser",
+            guild=ctx.guild.name
+        )
+        
+        embed = discord.Embed(
+            title="Welcome! (TEMPLATE - Edit this message)",
+            description=sample_message,
+            color=discord.Color.green()
+        )
+        embed.add_field(
+            name="Instructions",
+            value="✏️ Edit this message directly to update the welcome template!\n"
+                  "Use @SampleUser as placeholder for new members.",
+            inline=False
+        )
+        embed.set_footer(text="This is an editable template message")
+        
+        try:
+            await welcome_channel.send(embed=embed)
+            await ctx.respond(f"Sent editable welcome template to {welcome_channel.mention}. Edit it directly to update the template!", ephemeral=True)
+        except Exception as e:
+            await ctx.respond(f"Error sending template: {e}", ephemeral=True)
 
     @slash_command(name="sync_commands")
     @commands.has_permissions(administrator=True)
