@@ -275,29 +275,7 @@ class memberjoin(commands.Cog):
         
         await ctx.respond(embed=embed, ephemeral=True)
 
-    @slash_command(name="set_welcome_channel")
-    @commands.has_permissions(manage_guild=True)
-    async def set_welcome_channel(self, ctx,
-                                 channel: Option(discord.TextChannel, "Channel for welcome messages"),
-                                 welcome_message: Option(str, "Custom welcome message for the channel (use {member} and {guild})", required=False)):
-        """Set the guild channel where welcome messages will be sent"""
-        guild_settings = self.get_guild_settings(ctx.guild.id)
-        
-        guild_settings["welcome_channel"] = channel.id
-        if welcome_message:
-            guild_settings["welcome_message"] = welcome_message
-        
-        self.save_settings()
-        
-        embed = discord.Embed(
-            title="Welcome Channel Set",
-            description=f"Welcome messages will now be sent to {channel.mention}",
-            color=discord.Color.green()
-        )
-        if welcome_message:
-            embed.add_field(name="Custom Message", value=welcome_message, inline=False)
-        
-        await ctx.respond(embed=embed, ephemeral=True)
+    
 
     @slash_command(name="edit_welcome_message")
     @commands.has_permissions(manage_guild=True)
