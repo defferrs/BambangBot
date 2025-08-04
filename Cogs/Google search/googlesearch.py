@@ -21,8 +21,8 @@ class Search(commands.Cog):
         
         try:
             results = []
-            # Use simple search without advanced parameters
-            search_results = search(query, num=5, stop=5, pause=2)
+            # Use basic search with minimal parameters
+            search_results = search(query, stop=5, pause=2)
             
             for result in search_results:
                 results.append(str(result))
