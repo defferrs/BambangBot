@@ -376,7 +376,10 @@ class memberjoin(commands.Cog):
         """Manually sync slash commands (Admin only)"""
         try:
             synced = await self.bot.sync_commands()
-            await ctx.respond(f"Synced {len(synced)} commands!", ephemeral=True)
+            if synced is not None:
+                await ctx.respond(f"Synced {len(synced)} commands!", ephemeral=True)
+            else:
+                await ctx.respond("Commands synced successfully!", ephemeral=True)
         except Exception as e:
             await ctx.respond(f"Failed to sync commands: {e}", ephemeral=True)
 

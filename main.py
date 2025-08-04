@@ -14,7 +14,10 @@ async def on_ready():
     print(f'{bot.user} has connected to Discord!')
     try:
         synced = await bot.sync_commands()
-        print(f"Synced {len(synced)} commands")
+        if synced is not None:
+            print(f"Synced {len(synced)} commands")
+        else:
+            print("Commands synced successfully")
     except Exception as e:
         print(f"Failed to sync commands: {e}")
 
