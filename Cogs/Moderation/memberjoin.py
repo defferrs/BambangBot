@@ -38,7 +38,8 @@ class memberjoin(commands.Cog):
         guild_id_str = str(guild_id)
         if guild_id_str not in self.settings:
             self.settings[guild_id_str] = {
-                "welcome_enabled": True,
+                "welcome_dm_enabled": False,
+                "welcome_channel_enabled": True,
                 "goodbye_enabled": True,
                 "auto_role": None,
                 "auto_nickname": True,
@@ -54,20 +55,18 @@ class memberjoin(commands.Cog):
         """Handle member join events"""
         guild_settings = self.get_guild_settings(member.guild.id)
         
-        if not guild_settings["welcome_enabled"]:
-            return
-
         print(f'{member} joined {member.guild.name}!')
         
-        # Send welcome DM
-        try:
-            welcome_msg = guild_settings["welcome_message"].format(
-                member=member.name,
-                guild=member.guild.name
-            )
-            await member.send(welcome_msg)
-        except discord.Forbidden:
-            print(f"Could not send DM to {member}")
+        # Send welcome DM if enabled
+        if guild_settings["welcome_dm_enabled"]:
+            try:
+                welcome_msg = guild_settings["welcome_message"].format(
+                    member=member.name,
+                    guild=member.guild.name
+                )
+                await member.send(welcome_msg)
+            except discord.Forbidden:
+                print(f"Could not send DM to {member}")
 
         # Add auto role if configured
         if guild_settings["auto_role"]:
@@ -90,48 +89,49 @@ class memberjoin(commands.Cog):
             except discord.Forbidden:
                 print(f"Could not set nickname for {member}")
 
-        # Send welcome message to channel
-        welcome_channel_id = guild_settings["welcome_channel"]
-        welcome_channel = None
-        
-        if welcome_channel_id:
-            welcome_channel = member.guild.get_channel(welcome_channel_id)
-        
-        if not welcome_channel:
-            welcome_channel = member.guild.system_channel
+        # Send welcome message to channel if enabled
+        if guild_settings["welcome_channel_enabled"]:
+            welcome_channel_id = guild_settings["welcome_channel"]
+            welcome_channel = None
+            
+            if welcome_channel_id:
+                welcome_channel = member.guild.get_channel(welcome_channel_id)
+            
+            if not welcome_channel:
+                welcome_channel = member.guild.system_channel
 
-        if welcome_channel:
-            try:
-                # Use the customizable welcome message from settings
-                welcome_msg = guild_settings["welcome_message"].format(
-                    member=member.mention,
-                    guild=member.guild.name
-                )
-                
-                embed = discord.Embed(
-                    title="Welcome!",
-                    description=welcome_msg,
-                    color=discord.Color.green()
-                )
-                
-                # Add rules field if rules channel exists
-                if member.guild.rules_channel:
+            if welcome_channel:
+                try:
+                    # Use the customizable welcome message from settings
+                    welcome_msg = guild_settings["welcome_message"].format(
+                        member=member.mention,
+                        guild=member.guild.name
+                    )
+                    
+                    embed = discord.Embed(
+                        title="Welcome!",
+                        description=welcome_msg,
+                        color=discord.Color.green()
+                    )
+                    
+                    # Add rules field if rules channel exists
+                    if member.guild.rules_channel:
+                        embed.add_field(
+                            name="📋 Rules",
+                            value=f'Please read the rules in {member.guild.rules_channel.mention} first',
+                            inline=False
+                        )
+                    
                     embed.add_field(
-                        name="📋 Rules",
-                        value=f'Please read the rules in {member.guild.rules_channel.mention} first',
+                        name="🎉 Have fun!",
+                        value='Enjoy your time in the server!',
                         inline=False
                     )
-                
-                embed.add_field(
-                    name="🎉 Have fun!",
-                    value='Enjoy your time in the server!',
-                    inline=False
-                )
-                
-                embed.set_footer(text=f"Member #{member.guild.member_count}")
-                await welcome_channel.send(embed=embed)
-            except Exception as e:
-                print(f"Error sending welcome message: {e}")
+                    
+                    embed.set_footer(text=f"Member #{member.guild.member_count}")
+                    await welcome_channel.send(embed=embed)
+                except Exception as e:
+                    print(f"Error sending welcome message: {e}")
 
     
 
@@ -172,15 +172,17 @@ class memberjoin(commands.Cog):
     @slash_command()
     @commands.has_permissions(manage_guild=True)
     async def setup_welcome(self, ctx, 
-                           enabled: Option(bool, "Enable welcome messages"),
+                           dm_enabled: Option(bool, "Enable welcome DMs to new members", default=False),
+                           channel_enabled: Option(bool, "Enable welcome messages in guild channel", default=True),
                            role: Option(discord.Role, "Auto role to assign", required=False),
                            channel: Option(discord.TextChannel, "Guild channel for welcome messages", required=False),
                            auto_nickname: Option(bool, "Enable auto nickname", default=True),
-                           welcome_message: Option(str, "Custom welcome message for guild channel (use {member} and {guild})", required=False)):
-        """Configure complete welcome settings for new members (DM + Guild Channel)"""
+                           welcome_message: Option(str, "Custom welcome message (use {member} and {guild})", required=False)):
+        """Configure complete welcome settings for new members"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
-        guild_settings["welcome_enabled"] = enabled
+        guild_settings["welcome_dm_enabled"] = dm_enabled
+        guild_settings["welcome_channel_enabled"] = channel_enabled
         if role:
             guild_settings["auto_role"] = role.id
         if channel:
@@ -195,7 +197,8 @@ class memberjoin(commands.Cog):
             title="Welcome Settings Updated",
             color=discord.Color.blue()
         )
-        embed.add_field(name="Enabled", value=enabled, inline=True)
+        embed.add_field(name="DM Enabled", value=dm_enabled, inline=True)
+        embed.add_field(name="Channel Enabled", value=channel_enabled, inline=True)
         embed.add_field(name="Auto Role", value=role.mention if role else "None", inline=True)
         embed.add_field(name="Channel", value=channel.mention if channel else "System Channel", inline=True)
         embed.add_field(name="Auto Nickname", value=auto_nickname, inline=True)
@@ -250,7 +253,8 @@ class memberjoin(commands.Cog):
         
         embed.add_field(
             name="Welcome Settings",
-            value=f"Enabled: {guild_settings['welcome_enabled']}\n"
+            value=f"DM Enabled: {guild_settings['welcome_dm_enabled']}\n"
+                  f"Channel Enabled: {guild_settings['welcome_channel_enabled']}\n"
                   f"Auto Role: {auto_role.mention if auto_role else 'None'}\n"
                   f"Channel: {welcome_channel.mention if welcome_channel else 'System Channel'}\n"
                   f"Auto Nickname: {guild_settings['auto_nickname']}\n"
