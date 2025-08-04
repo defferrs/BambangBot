@@ -102,21 +102,33 @@ class memberjoin(commands.Cog):
 
         if welcome_channel:
             try:
+                # Use the customizable welcome message from settings
+                welcome_msg = guild_settings["welcome_message"].format(
+                    member=member.mention,
+                    guild=member.guild.name
+                )
+                
                 embed = discord.Embed(
                     title="Welcome!",
-                    description=f'Selamat datang {member.mention} di server ini!',
+                    description=welcome_msg,
                     color=discord.Color.green()
                 )
+                
+                # Add rules field if rules channel exists
+                if member.guild.rules_channel:
+                    embed.add_field(
+                        name="📋 Rules",
+                        value=f'Please read the rules in {member.guild.rules_channel.mention} first',
+                        inline=False
+                    )
+                
                 embed.add_field(
-                    name="Rules",
-                    value=f'Silahkan baca rules di {member.guild.rules_channel.mention if member.guild.rules_channel else "channel rules"} terlebih dahulu',
+                    name="🎉 Have fun!",
+                    value='Enjoy your time in the server!',
                     inline=False
                 )
-                embed.add_field(
-                    name="Have fun!",
-                    value='Selamat bermain!',
-                    inline=False
-                )
+                
+                embed.set_footer(text=f"Member #{member.guild.member_count}")
                 await welcome_channel.send(embed=embed)
             except Exception as e:
                 print(f"Error sending welcome message: {e}")
@@ -135,36 +147,35 @@ class memberjoin(commands.Cog):
         if not welcome_channel_id or after.channel.id != welcome_channel_id:
             return
         
-        # Check if the bot sent this message (welcome message)
+        # Check if the bot sent this message and it's a template message
         if after.author != self.bot.user:
             return
         
-        # Update the welcome message template based on the edit
-        # Extract the new message content from the embed description if it's an embed
-        new_message = ""
-        if after.embeds:
-            embed = after.embeds[0]
-            if embed.description:
-                # Remove the mention and extract the template
-                description = embed.description
-                # Replace mention pattern with {member} placeholder
-                import re
-                new_message = re.sub(r'<@!?\d+>', '{member}', description)
-        else:
-            new_message = after.content
+        # Check if this is a template message by looking for the footer
+        if not after.embeds or not after.embeds[0].footer or "editable template" not in after.embeds[0].footer.text.lower():
+            return
         
-        if new_message and new_message != guild_settings["welcome_message"]:
-            guild_settings["welcome_message"] = new_message
-            self.save_settings()
+        # Update the welcome message template based on the edit
+        embed = after.embeds[0]
+        if embed.description:
+            # Replace @SampleUser with {member} placeholder for template
+            import re
+            new_message = embed.description
+            new_message = re.sub(r'@SampleUser', '{member}', new_message)
+            new_message = re.sub(r'<@!?\d+>', '{member}', new_message)
             
-            # Send confirmation to the editor
-            try:
-                await after.channel.send(
-                    f"✅ Welcome message template updated by {after.author.mention}!",
-                    delete_after=5
-                )
-            except:
-                pass
+            if new_message != guild_settings["welcome_message"]:
+                guild_settings["welcome_message"] = new_message
+                self.save_settings()
+                
+                # Send confirmation
+                try:
+                    confirmation = await after.channel.send(
+                        f"✅ Welcome message template updated! New members will see:\n```{new_message}```",
+                        delete_after=10
+                    )
+                except:
+                    pass
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
@@ -342,7 +353,7 @@ class memberjoin(commands.Cog):
             welcome_channel = ctx.guild.system_channel
             
         if not welcome_channel:
-            await ctx.respond("No welcome channel configured and no system channel available!", ephemeral=True)
+            await ctx.respond("❌ No welcome channel configured and no system channel available!", ephemeral=True)
             return
         
         # Create a sample welcome message that can be edited
@@ -352,23 +363,36 @@ class memberjoin(commands.Cog):
         )
         
         embed = discord.Embed(
-            title="Welcome! (TEMPLATE - Edit this message)",
+            title="🎨 Welcome Template Editor",
             description=sample_message,
-            color=discord.Color.green()
+            color=discord.Color.blue()
         )
         embed.add_field(
-            name="Instructions",
-            value="✏️ Edit this message directly to update the welcome template!\n"
-                  "Use @SampleUser as placeholder for new members.",
+            name="📝 How to Edit",
+            value="1. Click the **Edit Message** button (three dots)\n"
+                  "2. Modify the description text above\n"
+                  "3. Keep `@SampleUser` as placeholder for new members\n"
+                  "4. Changes will be saved automatically!",
             inline=False
         )
-        embed.set_footer(text="This is an editable template message")
+        embed.add_field(
+            name="💡 Tips",
+            value="• Use `{member}` in your template for member mentions\n"
+                  "• Use `{guild}` for server name\n"
+                  "• Current template will be used for new members",
+            inline=False
+        )
+        embed.set_footer(text="Editable template message - Edit this directly!")
         
         try:
-            await welcome_channel.send(embed=embed)
-            await ctx.respond(f"Sent editable welcome template to {welcome_channel.mention}. Edit it directly to update the template!", ephemeral=True)
+            template_msg = await welcome_channel.send(embed=embed)
+            await ctx.respond(
+                f"✅ Editable welcome template sent to {welcome_channel.mention}!\n"
+                f"Edit the message description directly to update the template.",
+                ephemeral=True
+            )
         except Exception as e:
-            await ctx.respond(f"Error sending template: {e}", ephemeral=True)
+            await ctx.respond(f"❌ Error sending template: {e}", ephemeral=True)
 
     @slash_command(name="sync_commands")
     @commands.has_permissions(administrator=True)
