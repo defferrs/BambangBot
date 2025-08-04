@@ -160,10 +160,10 @@ class memberjoin(commands.Cog):
     async def setup_welcome(self, ctx, 
                            enabled: Option(bool, "Enable welcome messages"),
                            role: Option(discord.Role, "Auto role to assign", required=False),
-                           channel: Option(discord.TextChannel, "Welcome channel", required=False),
+                           channel: Option(discord.TextChannel, "Guild channel for welcome messages", required=False),
                            auto_nickname: Option(bool, "Enable auto nickname", default=True),
-                           welcome_message: Option(str, "Custom welcome message (use {member} and {guild})", required=False)):
-        """Configure welcome settings for new members"""
+                           welcome_message: Option(str, "Custom welcome message for guild channel (use {member} and {guild})", required=False)):
+        """Configure complete welcome settings for new members (DM + Guild Channel)"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
         guild_settings["welcome_enabled"] = enabled
@@ -192,9 +192,9 @@ class memberjoin(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def setup_goodbye(self, ctx,
                            enabled: Option(bool, "Enable goodbye messages"),
-                           channel: Option(discord.TextChannel, "Goodbye channel", required=False),
-                           goodbye_message: Option(str, "Custom goodbye message (use {member})", required=False)):
-        """Configure goodbye settings for leaving members"""
+                           channel: Option(discord.TextChannel, "Guild channel for goodbye messages", required=False),
+                           goodbye_message: Option(str, "Custom goodbye message for guild channel (use {member})", required=False)):
+        """Configure goodbye messages for leaving members in guild channel"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
         guild_settings["goodbye_enabled"] = enabled
@@ -254,6 +254,30 @@ class memberjoin(commands.Cog):
                   f"Message: {guild_settings['goodbye_message'][:100]}...",
             inline=False
         )
+        
+        await ctx.respond(embed=embed, ephemeral=True)
+
+    @slash_command(name="set_welcome_channel")
+    @commands.has_permissions(manage_guild=True)
+    async def set_welcome_channel(self, ctx,
+                                 channel: Option(discord.TextChannel, "Channel for welcome messages"),
+                                 welcome_message: Option(str, "Custom welcome message for the channel (use {member} and {guild})", required=False)):
+        """Set the guild channel where welcome messages will be sent"""
+        guild_settings = self.get_guild_settings(ctx.guild.id)
+        
+        guild_settings["welcome_channel"] = channel.id
+        if welcome_message:
+            guild_settings["welcome_message"] = welcome_message
+        
+        self.save_settings()
+        
+        embed = discord.Embed(
+            title="Welcome Channel Set",
+            description=f"Welcome messages will now be sent to {channel.mention}",
+            color=discord.Color.green()
+        )
+        if welcome_message:
+            embed.add_field(name="Custom Message", value=welcome_message, inline=False)
         
         await ctx.respond(embed=embed, ephemeral=True)
 
