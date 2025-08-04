@@ -301,7 +301,7 @@ class Music(commands.Cog):
         song_info = {"query": query, "display": display_text}
         self.music_queue[ctx.guild.id].append(song_info)
 
-        await ctx.followup.send(f"Ditambahkan ke antrian: {display_text}")
+        await ctx.followup.send(f"Ditambahkan ke antrian: {display_text}", ephemeral=True)
         if not ctx.voice_client.is_playing():
             await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
 
