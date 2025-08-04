@@ -21,13 +21,15 @@ class Search(commands.Cog):
         
         try:
             results = []
-            # Use basic search with minimal parameters
-            search_results = search(query, stop=5, pause=2)
+            # Use most basic search function
+            search_results = search(query)
             
+            count = 0
             for result in search_results:
-                results.append(str(result))
-                if len(results) >= 5:
+                if count >= 5:
                     break
+                results.append(str(result))
+                count += 1
 
             if not results:
                 embed.add_field(
