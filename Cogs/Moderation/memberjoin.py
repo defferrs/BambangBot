@@ -114,6 +114,9 @@ class memberjoin(commands.Cog):
                         color=discord.Color.green()
                     )
                     
+                    # Set the user's avatar as the thumbnail
+                    embed.set_thumbnail(url=member.display_avatar.url)
+                    
                     # Add rules field if rules channel exists
                     if member.guild.rules_channel:
                         embed.add_field(
