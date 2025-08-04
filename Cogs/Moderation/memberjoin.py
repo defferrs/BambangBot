@@ -109,7 +109,7 @@ class memberjoin(commands.Cog):
                     )
                     
                     embed = discord.Embed(
-                        title="Welcome!",
+                        title="Selamat Datang!",
                         description=welcome_msg,
                         color=discord.Color.green()
                     )
@@ -117,14 +117,14 @@ class memberjoin(commands.Cog):
                     # Add rules field if rules channel exists
                     if member.guild.rules_channel:
                         embed.add_field(
-                            name="📋 Rules",
-                            value=f'Please read the rules in {member.guild.rules_channel.mention} first',
+                            name="📋 Peraturan",
+                            value=f'Silakan baca peraturan di {member.guild.rules_channel.mention} terlebih dahulu',
                             inline=False
                         )
                     
                     embed.add_field(
-                        name="🎉 Have fun!",
-                        value='Enjoy your time in the server!',
+                        name="🎉 Selamat bersenang-senang!",
+                        value='Nikmati waktu Anda di server ini!',
                         inline=False
                     )
                     
@@ -161,7 +161,7 @@ class memberjoin(commands.Cog):
                     member=member.mention
                 )
                 embed = discord.Embed(
-                    title="Goodbye!",
+                    title="Selamat Tinggal!",
                     description=goodbye_msg,
                     color=discord.Color.red()
                 )
@@ -172,13 +172,13 @@ class memberjoin(commands.Cog):
     @slash_command()
     @commands.has_permissions(manage_guild=True)
     async def setup_welcome(self, ctx, 
-                           dm_enabled: Option(bool, "Enable welcome DMs to new members", default=False),
-                           channel_enabled: Option(bool, "Enable welcome messages in guild channel", default=True),
-                           role: Option(discord.Role, "Auto role to assign", required=False),
-                           channel: Option(discord.TextChannel, "Guild channel for welcome messages", required=False),
-                           auto_nickname: Option(bool, "Enable auto nickname", default=True),
-                           welcome_message: Option(str, "Custom welcome message (use {member} and {guild})", required=False)):
-        """Configure complete welcome settings for new members"""
+                           dm_enabled: Option(bool, "Aktifkan DM selamat datang untuk member baru", default=False),
+                           channel_enabled: Option(bool, "Aktifkan pesan selamat datang di channel guild", default=True),
+                           role: Option(discord.Role, "Role otomatis yang akan diberikan", required=False),
+                           channel: Option(discord.TextChannel, "Channel guild untuk pesan selamat datang", required=False),
+                           auto_nickname: Option(bool, "Aktifkan nickname otomatis", default=True),
+                           welcome_message: Option(str, "Pesan selamat datang kustom (gunakan {member} dan {guild})", required=False)):
+        """Konfigurasi lengkap pengaturan selamat datang untuk member baru"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
         guild_settings["welcome_dm_enabled"] = dm_enabled
@@ -194,24 +194,24 @@ class memberjoin(commands.Cog):
         self.save_settings()
         
         embed = discord.Embed(
-            title="Welcome Settings Updated",
+            title="Pengaturan Selamat Datang Diperbarui",
             color=discord.Color.blue()
         )
-        embed.add_field(name="DM Enabled", value=dm_enabled, inline=True)
-        embed.add_field(name="Channel Enabled", value=channel_enabled, inline=True)
-        embed.add_field(name="Auto Role", value=role.mention if role else "None", inline=True)
-        embed.add_field(name="Channel", value=channel.mention if channel else "System Channel", inline=True)
-        embed.add_field(name="Auto Nickname", value=auto_nickname, inline=True)
+        embed.add_field(name="DM Aktif", value="Ya" if dm_enabled else "Tidak", inline=True)
+        embed.add_field(name="Channel Aktif", value="Ya" if channel_enabled else "Tidak", inline=True)
+        embed.add_field(name="Role Otomatis", value=role.mention if role else "Tidak ada", inline=True)
+        embed.add_field(name="Channel", value=channel.mention if channel else "Channel Sistem", inline=True)
+        embed.add_field(name="Nickname Otomatis", value="Ya" if auto_nickname else "Tidak", inline=True)
         
         await ctx.respond(embed=embed, ephemeral=True)
 
     @slash_command()
     @commands.has_permissions(manage_guild=True)
     async def setup_goodbye(self, ctx,
-                           enabled: Option(bool, "Enable goodbye messages"),
-                           channel: Option(discord.TextChannel, "Guild channel for goodbye messages", required=False),
-                           goodbye_message: Option(str, "Custom goodbye message for guild channel (use {member})", required=False)):
-        """Configure goodbye messages for leaving members in guild channel"""
+                           enabled: Option(bool, "Aktifkan pesan perpisahan"),
+                           channel: Option(discord.TextChannel, "Channel guild untuk pesan perpisahan", required=False),
+                           goodbye_message: Option(str, "Pesan perpisahan kustom untuk channel guild (gunakan {member})", required=False)):
+        """Konfigurasi pesan perpisahan untuk member yang keluar di channel guild"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
         guild_settings["goodbye_enabled"] = enabled
@@ -223,27 +223,27 @@ class memberjoin(commands.Cog):
         self.save_settings()
         
         embed = discord.Embed(
-            title="Goodbye Settings Updated",
+            title="Pengaturan Perpisahan Diperbarui",
             color=discord.Color.blue()
         )
-        embed.add_field(name="Enabled", value=enabled, inline=True)
-        embed.add_field(name="Channel", value=channel.mention if channel else "System Channel", inline=True)
+        embed.add_field(name="Aktif", value="Ya" if enabled else "Tidak", inline=True)
+        embed.add_field(name="Channel", value=channel.mention if channel else "Channel Sistem", inline=True)
         
         await ctx.respond(embed=embed, ephemeral=True)
 
     @slash_command(name="member_count")
     async def membercount(self, ctx):
-        """Get the current member count"""
-        await ctx.respond(f"This server has {ctx.guild.member_count} members")
+        """Dapatkan jumlah member saat ini"""
+        await ctx.respond(f"Server ini memiliki {ctx.guild.member_count} member")
 
     @slash_command(name="member_settings")
     @commands.has_permissions(manage_guild=True)
     async def view_settings(self, ctx):
-        """View current member join/leave settings"""
+        """Lihat pengaturan join/leave member saat ini"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
         embed = discord.Embed(
-            title="Member Join/Leave Settings",
+            title="Pengaturan Join/Leave Member",
             color=discord.Color.blue()
         )
         
@@ -252,13 +252,13 @@ class memberjoin(commands.Cog):
         auto_role = ctx.guild.get_role(guild_settings["auto_role"]) if guild_settings["auto_role"] else None
         
         embed.add_field(
-            name="Welcome Settings",
-            value=f"DM Enabled: {guild_settings['welcome_dm_enabled']}\n"
-                  f"Channel Enabled: {guild_settings['welcome_channel_enabled']}\n"
-                  f"Auto Role: {auto_role.mention if auto_role else 'None'}\n"
-                  f"Channel: {welcome_channel.mention if welcome_channel else 'System Channel'}\n"
-                  f"Auto Nickname: {guild_settings['auto_nickname']}\n"
-                  f"Message: {guild_settings['welcome_message'][:100]}...",
+            name="Pengaturan Selamat Datang",
+            value=f"DM Aktif: {'Ya' if guild_settings['welcome_dm_enabled'] else 'Tidak'}\n"
+                  f"Channel Aktif: {'Ya' if guild_settings['welcome_channel_enabled'] else 'Tidak'}\n"
+                  f"Role Otomatis: {auto_role.mention if auto_role else 'Tidak ada'}\n"
+                  f"Channel: {welcome_channel.mention if welcome_channel else 'Channel Sistem'}\n"
+                  f"Nickname Otomatis: {'Ya' if guild_settings['auto_nickname'] else 'Tidak'}\n"
+                  f"Pesan: {guild_settings['welcome_message'][:100]}...",
             inline=False
         )
         
@@ -266,10 +266,10 @@ class memberjoin(commands.Cog):
         goodbye_channel = ctx.guild.get_channel(guild_settings["goodbye_channel"]) if guild_settings["goodbye_channel"] else None
         
         embed.add_field(
-            name="Goodbye Settings", 
-            value=f"Enabled: {guild_settings['goodbye_enabled']}\n"
-                  f"Channel: {goodbye_channel.mention if goodbye_channel else 'System Channel'}\n"
-                  f"Message: {guild_settings['goodbye_message'][:100]}...",
+            name="Pengaturan Perpisahan", 
+            value=f"Aktif: {'Ya' if guild_settings['goodbye_enabled'] else 'Tidak'}\n"
+                  f"Channel: {goodbye_channel.mention if goodbye_channel else 'Channel Sistem'}\n"
+                  f"Pesan: {guild_settings['goodbye_message'][:100]}...",
             inline=False
         )
         
@@ -280,16 +280,16 @@ class memberjoin(commands.Cog):
     @slash_command(name="edit_welcome_message")
     @commands.has_permissions(manage_guild=True)
     async def edit_welcome_message(self, ctx):
-        """Edit the welcome message template using a text input modal"""
+        """Edit template pesan selamat datang menggunakan modal input teks"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
         class WelcomeMessageModal(discord.ui.Modal):
             def __init__(self):
-                super().__init__(title="Edit Welcome Message")
+                super().__init__(title="Edit Pesan Selamat Datang")
                 
                 self.message_input = discord.ui.InputText(
-                    label="Welcome Message",
-                    placeholder="Enter your welcome message here...",
+                    label="Pesan Selamat Datang",
+                    placeholder="Masukkan pesan selamat datang Anda di sini...",
                     value=guild_settings["welcome_message"],
                     style=discord.InputTextStyle.paragraph,
                     max_length=1000
@@ -297,9 +297,9 @@ class memberjoin(commands.Cog):
                 self.add_item(self.message_input)
                 
                 self.tips_input = discord.ui.InputText(
-                    label="Tips (Read Only)",
-                    placeholder="Use {member} for user mention, {guild} for server name",
-                    value="Use {member} for user mention, {guild} for server name",
+                    label="Tips (Hanya Baca)",
+                    placeholder="Gunakan {member} untuk mention user, {guild} untuk nama server",
+                    value="Gunakan {member} untuk mention user, {guild} untuk nama server",
                     style=discord.InputTextStyle.short,
                     required=False
                 )
@@ -309,7 +309,7 @@ class memberjoin(commands.Cog):
                 new_message = self.message_input.value
                 
                 if not new_message.strip():
-                    await interaction.response.send_message("❌ Welcome message cannot be empty!", ephemeral=True)
+                    await interaction.response.send_message("❌ Pesan selamat datang tidak boleh kosong!", ephemeral=True)
                     return
                 
                 # Update the settings
@@ -318,17 +318,17 @@ class memberjoin(commands.Cog):
                 
                 # Show preview
                 preview_message = new_message.format(
-                    member="@SampleUser",
+                    member="@ContohUser",
                     guild=interaction.guild.name
                 )
                 
                 embed = discord.Embed(
-                    title="✅ Welcome Message Updated!",
-                    description=f"**Preview:**\n{preview_message}",
+                    title="✅ Pesan Selamat Datang Diperbarui!",
+                    description=f"**Pratinjau:**\n{preview_message}",
                     color=discord.Color.green()
                 )
                 embed.add_field(
-                    name="📝 New Template",
+                    name="📝 Template Baru",
                     value=f"`{new_message}`",
                     inline=False
                 )
@@ -342,15 +342,15 @@ class memberjoin(commands.Cog):
     @slash_command(name="sync_commands")
     @commands.has_permissions(administrator=True)
     async def sync_commands(self, ctx):
-        """Manually sync slash commands (Admin only)"""
+        """Sinkronisasi manual slash commands (Khusus Admin)"""
         try:
             synced = await self.bot.sync_commands()
             if synced is not None:
-                await ctx.respond(f"Synced {len(synced)} commands!", ephemeral=True)
+                await ctx.respond(f"Berhasil menyinkronkan {len(synced)} command!", ephemeral=True)
             else:
-                await ctx.respond("Commands synced successfully!", ephemeral=True)
+                await ctx.respond("Command berhasil disinkronkan!", ephemeral=True)
         except Exception as e:
-            await ctx.respond(f"Failed to sync commands: {e}", ephemeral=True)
+            await ctx.respond(f"Gagal menyinkronkan command: {e}", ephemeral=True)
 
 def setup(bot):
     bot.add_cog(memberjoin(bot))
