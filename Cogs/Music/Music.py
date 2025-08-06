@@ -1,4 +1,3 @@
-
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -202,7 +201,7 @@ class Music(commands.Cog):
         self.queue = {}
         self.current_song = {}
         self.auto_play_mode = {}  # Track guilds in auto-play mode
-    
+
     async def search_youtube(self, query):
         """Search for music on YouTube"""
         try:
@@ -223,7 +222,7 @@ class Music(commands.Cog):
     @app_commands.command(name="play", description="🎵 Play music from YouTube with interactive controls")
     async def play(self, interaction: discord.Interaction, *, query: str):
         """Play music with modern interactive controls"""
-        
+
         # Check if user is in voice channel
         if not interaction.user.voice:
             embed = discord.Embed(
@@ -291,7 +290,7 @@ class Music(commands.Cog):
                 description="PyNaCl is required for voice features. Please install it.",
                 color=0xFF0000
             )
-            await ctx.edit(embed=error_embed)
+            await interaction.edit_original_response(embed=error_embed)
             return
 
         # Check opus library
@@ -301,7 +300,7 @@ class Music(commands.Cog):
                 description="Opus library is required for audio playback. Attempting to load...",
                 color=0xFF0000
             )
-            await ctx.edit(embed=error_embed)
+            await interaction.edit_original_response(embed=error_embed)
             try:
                 discord.opus.load_opus('libopus')
             except:
@@ -313,7 +312,7 @@ class Music(commands.Cog):
                         description="Could not load Opus library. Music features unavailable.",
                         color=0xFF0000
                     )
-                    await ctx.edit(embed=error_embed)
+                    await interaction.edit_original_response(embed=error_embed)
                     return
 
         # Connect to voice channel with better error handling
@@ -379,7 +378,7 @@ class Music(commands.Cog):
             if thumbnail:
                 embed.set_thumbnail(url=thumbnail)
             embed.set_footer(text="🎵 Your song will play when queue reaches it")
-            
+
             view = MusicControls(self.bot)
             await interaction.edit_original_response(embed=embed, view=view)
 
@@ -401,7 +400,7 @@ class Music(commands.Cog):
 
         title, url = self.queue[interaction.guild.id].pop(0)
         self.current_song[interaction.guild.id] = title
-        
+
         # Track for auto-play mode
         if not hasattr(self, 'auto_play_mode'):
             self.auto_play_mode = {}
@@ -433,34 +432,34 @@ class Music(commands.Cog):
         audio_url = None
         duration = 0
         thumbnail = ''
-        
+
         # Try multiple extraction methods
         extraction_methods = [ydl_opts_play]
-        
+
         for i, opts in enumerate(extraction_methods):
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(url, download=False)
-                    
+
                     # Get the best audio format
                     if 'formats' in info:
                         for format in info['formats']:
                             if format.get('acodec') != 'none' and format.get('url'):
                                 audio_url = format['url']
                                 break
-                    
+
                     if not audio_url and 'url' in info:
                         audio_url = info['url']
-                    
+
                     if audio_url:
                         duration = info.get('duration', 0)
                         thumbnail = info.get('thumbnail', '')
                         break
-                        
+
             except Exception as extraction_error:
                 print(f"Extraction method {i+1} failed: {str(extraction_error)}")
                 continue
-        
+
         if not audio_url:
             raise Exception("Could not extract audio URL from any method")
 
@@ -477,7 +476,7 @@ class Music(commands.Cog):
                 },
                 {}  # No options fallback
             ]
-            
+
             source = None
             for i, ffmpeg_options in enumerate(ffmpeg_options_list):
                 try:
@@ -489,10 +488,10 @@ class Music(commands.Cog):
                 except Exception as ffmpeg_error:
                     print(f"FFmpeg method {i+1} failed: {str(ffmpeg_error)}")
                     continue
-            
+
             if not source:
                 raise Exception("Could not create audio source with any FFmpeg options")
-            
+
             # Play audio
             voice.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(interaction, voice), self.bot.loop))
 
@@ -505,7 +504,7 @@ class Music(commands.Cog):
             embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}" if duration else "Unknown", inline=True)
             embed.add_field(name="Remaining", value=f"{len(self.queue[interaction.guild.id])} songs", inline=True)
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
-            
+
             if thumbnail:
                 embed.set_thumbnail(url=thumbnail)
             embed.set_footer(text="🎵 Use the buttons below to control playback • Mobile optimized")
@@ -516,7 +515,7 @@ class Music(commands.Cog):
         except Exception as e:
             error_msg = str(e)
             print(f"Playback error for {title}: {error_msg}")
-            
+
             # Provide user-friendly error messages
             if "Sign in to confirm you're not a bot" in error_msg:
                 user_error = "YouTube requires verification. Please try a different song or use a direct YouTube link."
@@ -526,33 +525,33 @@ class Music(commands.Cog):
                 user_error = "YouTube is blocking requests. Please try again in a few minutes."
             else:
                 user_error = f"Audio extraction failed: {error_msg[:100]}..."
-            
+
             error_embed = discord.Embed(
                 title="❌ Playback Error",
                 description=f"Could not play: **{title}**\n\n**Issue:** {user_error}",
                 color=0xFF0000
             )
-            
+
             # Check if there are more songs in queue
             if self.queue[interaction.guild.id]:
                 error_embed.add_field(
-                    name="🔄 Auto-Skip", 
-                    value=f"Trying next song... ({len(self.queue[interaction.guild.id])} remaining)", 
+                    name="🔄 Auto-Skip",
+                    value=f"Trying next song... ({len(self.queue[interaction.guild.id])} remaining)",
                     inline=False
                 )
                 await interaction.edit_original_response(embed=error_embed)
-                
+
                 # Wait a moment before trying next song
                 await asyncio.sleep(3)
                 await self.play_next(interaction, voice)
             else:
                 error_embed.add_field(
-                    name="💡 Suggestion", 
-                    value="Try searching for a different song or check if the video is publicly available.", 
+                    name="💡 Suggestion",
+                    value="Try searching for a different song or check if the video is publicly available.",
                     inline=False
                 )
                 await interaction.edit_original_response(embed=error_embed)
-                
+
                 # Disconnect after error if no more songs
                 if voice and voice.is_connected():
                     await asyncio.sleep(5)
@@ -582,7 +581,7 @@ class Music(commands.Cog):
             if interaction.guild.id in self.queue:
                 self.queue[interaction.guild.id].clear()
             await voice.disconnect()
-            
+
             embed = discord.Embed(
                 title="⏹️ Music Stopped",
                 description="Music stopped, queue cleared, and disconnected from voice channel.",
@@ -642,26 +641,26 @@ class Music(commands.Cog):
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(video_url, download=False)
-                
+
                 # Try to get related videos from video info
                 related_videos = []
-                
+
                 # Method 1: Check if there are related entries
                 if 'related_videos' in info:
                     related_videos = info['related_videos'][:5]
-                
+
                 # Method 2: Search for similar content based on title and uploader
                 if not related_videos and 'title' in info:
                     title = info['title']
                     uploader = info.get('uploader', '')
-                    
+
                     # Create search queries based on the current video
                     search_queries = [
                         f"{title} similar",
                         f"{uploader} music",
                         f"{title.split()[0]} {title.split()[-1]}" if len(title.split()) > 1 else title
                     ]
-                    
+
                     for query in search_queries[:2]:  # Limit to 2 searches to avoid rate limiting
                         try:
                             search_info = ydl.extract_info(f"ytsearch3:{query}", download=False)
@@ -677,12 +676,12 @@ class Music(commands.Cog):
                                             break
                         except:
                             continue
-                        
+
                         if len(related_videos) >= 5:
                             break
 
                 return related_videos[:5]  # Return max 5 recommendations
-                
+
         except Exception as e:
             print(f"Recommendation error: {e}")
             return []
@@ -691,7 +690,7 @@ class Music(commands.Cog):
     @app_commands.describe(seed_query="Starting song or search term for recommendations")
     async def auto_play(self, interaction: discord.Interaction, *, seed_query: str):
         """Auto-play system with YouTube recommendations"""
-        
+
         # Check if user is in voice channel
         if not interaction.user.voice:
             embed = discord.Embed(
@@ -744,7 +743,7 @@ class Music(commands.Cog):
                 description=f"Could not find: **{seed_query}**\n\nError: {str(e)}",
                 color=0xFF0000
             )
-            await ctx.edit(embed=error_embed)
+            await interaction.edit_original_response(embed=error_embed)
             return
 
         # Connect to voice channel
@@ -784,7 +783,7 @@ class Music(commands.Cog):
         await interaction.edit_original_response(embed=update_embed)
 
         recommendations = await self.get_youtube_recommendations(seed_url)
-        
+
         # Add recommendations to queue
         for rec in recommendations:
             self.queue[interaction.guild.id].append((rec['title'], rec['webpage_url']))
@@ -792,7 +791,7 @@ class Music(commands.Cog):
         # Start playing
         if not voice.is_playing() and not voice.is_paused():
             await self.play_next(interaction, voice)
-        
+
         # Auto-play started embed
         embed = discord.Embed(
             title="🎲 Auto-Play Started!",
@@ -802,15 +801,15 @@ class Music(commands.Cog):
         embed.add_field(name="Queue Length", value=f"{len(self.queue[interaction.guild.id])} songs", inline=True)
         embed.add_field(name="Mode", value="🎲 Auto-Play", inline=True)
         embed.add_field(name="Based on", value=f"**{seed_title}**", inline=True)
-        
+
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
-        
+
         # Show some recommendations
         if recommendations:
             rec_list = "\n".join([f"• {rec['title'][:40]}{'...' if len(rec['title']) > 40 else ''}" for rec in recommendations[:3]])
             embed.add_field(name="🎵 Coming Up", value=rec_list, inline=False)
-        
+
         embed.set_footer(text="🎲 Auto-Play will continue with recommendations • Use buttons to control")
 
         view = MusicControls(self.bot)
