@@ -177,10 +177,10 @@ class memberjoin(commands.Cog):
     async def setup_welcome(self, ctx, 
                            dm_enabled: Option(bool, "Aktifkan DM selamat datang untuk member baru", default=False),
                            channel_enabled: Option(bool, "Aktifkan pesan selamat datang di channel guild", default=True),
-                           role: discord.Role = Option(None, "Role otomatis yang akan diberikan", required=False),
-                           channel: discord.TextChannel = Option(None, "Channel guild untuk pesan selamat datang", required=False),
                            auto_nickname: Option(bool, "Aktifkan nickname otomatis", default=True),
-                           welcome_message: str = Option(None, "Pesan selamat datang kustom (gunakan {member} dan {guild})", required=False)):
+                           role: Option(discord.Role, "Role otomatis yang akan diberikan", required=False) = None,
+                           channel: Option(discord.TextChannel, "Channel guild untuk pesan selamat datang", required=False) = None,
+                           welcome_message: Option(str, "Pesan selamat datang kustom (gunakan {member} dan {guild})", required=False) = None):
         """Konfigurasi lengkap pengaturan selamat datang untuk member baru"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
         
