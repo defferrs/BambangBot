@@ -210,8 +210,6 @@ class Music(commands.Cog):
         loading_embed = discord.Embed(
             title="🔍 Searching...",
             description=f"Looking for: **{query}**",
-            color=0x00FF00
-        )ry}**",
             color=0xFFA500
         )
         await ctx.respond(embed=loading_embed)
@@ -366,6 +364,7 @@ class Music(commands.Cog):
         if not audio_url:
             raise Exception("Could not extract audio URL from any method")
 
+        try:
             # Enhanced FFmpeg options with multiple fallbacks
             ffmpeg_options_list = [
                 {
