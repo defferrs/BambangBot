@@ -1,3 +1,4 @@
+
 import discord
 from discord.ext import commands
 from discord.commands import slash_command, Option
@@ -8,66 +9,46 @@ import re
 import os
 import subprocess
 
-# Voice dependencies
-try:
-    import nacl
-    import nacl.secret
-    from nacl.encoding import Base64Encoder
-    VOICE_ENABLED = True
-except ImportError:
-    VOICE_ENABLED = False
-    print("Warning: PyNaCl not installed, voice features may not work")
+# Global flags - will be checked at runtime, not import time
+VOICE_ENABLED = None
+OPUS_ENABLED = None
 
-try:
-    import opuslib
-    OPUS_ENABLED = True
-except ImportError:
-    OPUS_ENABLED = False
-    print("Warning: opuslib not installed, trying to load from discord")
-
-# Try to load opus from discord.py with better error handling
-def load_opus_library():
-    """Load opus library with multiple fallback options"""
-    try:
-        # Check if already loaded
-        if discord.opus.is_loaded():
-            return True
-
-        # List of possible opus library names to try
+def check_voice_dependencies():
+    """Check voice dependencies at runtime only"""
+    global VOICE_ENABLED, OPUS_ENABLED
+    
+    # Check PyNaCl
+    if VOICE_ENABLED is None:
+        try:
+            import nacl
+            import nacl.secret
+            from nacl.encoding import Base64Encoder
+            VOICE_ENABLED = True
+        except ImportError:
+            VOICE_ENABLED = False
+            return False, "PyNaCl not available"
+    
+    # Check Opus
+    if OPUS_ENABLED is None:
+        try:
+            import opuslib
+            OPUS_ENABLED = True
+        except ImportError:
+            OPUS_ENABLED = False
+    
+    # Try to load opus from discord.py
+    if not discord.opus.is_loaded():
         opus_names = ['libopus.so.0', 'libopus.so', 'opus', 'libopus', 'libopus-0.dll', 'opus.dll']
-
         for opus_name in opus_names:
             try:
                 discord.opus.load_opus(opus_name)
                 if discord.opus.is_loaded():
-                    print(f"✅ Opus library loaded ({opus_name})")
-                    return True
-            except Exception as e:
-                # Silent fail for individual attempts
+                    OPUS_ENABLED = True
+                    return True, "All dependencies ready"
+            except:
                 continue
-
-        return False
-
-    except Exception as e:
-        return False
-
-def check_voice_dependencies():
-    """Check voice dependencies at runtime"""
-    global VOICE_ENABLED, OPUS_ENABLED
-
-    # Check PyNaCl
-    if not VOICE_ENABLED:
-        try:
-            import nacl
-            VOICE_ENABLED = True
-        except ImportError:
-            return False, "PyNaCl not available"
-
-    # Check Opus
-    if not OPUS_ENABLED and not discord.opus.is_loaded():
-        if not load_opus_library():
-            return False, "Opus library not available"
-
+        return False, "Opus library not available"
+    
     return True, "All dependencies ready"
 
 # FFmpeg options for better audio quality
@@ -234,8 +215,7 @@ class Music(commands.Cog):
         self.bot = bot
         self.queue = {}
         self.current_song = {}
-        self.auto_play_mode = {}  # Track guilds in auto-play mode
-        # Don't check dependencies during __init__ to prevent startup failures
+        self.auto_play_mode = {}
 
     async def search_youtube(self, query):
         """Search for music on YouTube"""
@@ -329,8 +309,6 @@ class Music(commands.Cog):
             await ctx.edit(embed=error_embed)
             return
 
-        # Voice dependencies are already checked at the beginning of the function
-
         # Connect to voice channel with better error handling
         voice_channel = ctx.author.voice.channel
         voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
@@ -342,7 +320,6 @@ class Music(commands.Cog):
                 await voice.move_to(voice_channel)
         except discord.ClientException as e:
             if "already connected to a voice channel" in str(e).lower():
-                # Try to disconnect and reconnect
                 try:
                     await voice.disconnect(force=True)
                     await asyncio.sleep(1)
@@ -705,6 +682,17 @@ class Music(commands.Cog):
     async def auto_play(self, ctx, *, seed_query: Option(str, "Starting song or search term for recommendations")):
         """Auto-play system with YouTube recommendations"""
 
+        # Check dependencies first
+        deps_ready, deps_message = check_voice_dependencies()
+        if not deps_ready:
+            embed = discord.Embed(
+                title="❌ Voice Dependencies Missing",
+                description=f"{deps_message}\n\nMusic functionality is currently unavailable.",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed)
+            return
+
         # Check if user is in voice channel
         if not ctx.author.voice:
             embed = discord.Embed(
@@ -830,9 +818,12 @@ class Music(commands.Cog):
         await ctx.edit(embed=embed, view=view)
 
 def setup(bot):
-    """Setup function that never fails - always loads the cog"""
-    # Always create and add the cog - no dependency checks during startup
-    music_cog = Music(bot)
-    bot.add_cog(music_cog)
-    print("✅ Music cog loaded successfully")
-    print("  ↳ Dependencies will be checked when commands are used")
+    """Setup function that never fails"""
+    try:
+        music_cog = Music(bot)
+        bot.add_cog(music_cog)
+        print("✅ Music cog loaded successfully")
+        print("  ↳ Dependencies will be checked when commands are used")
+    except Exception as e:
+        print(f"⚠️ Music cog failed to load: {e}")
+        # Don't raise the exception to prevent bot startup failure
