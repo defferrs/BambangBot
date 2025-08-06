@@ -137,15 +137,18 @@ class MusicControls(discord.ui.View):
                 
                 voice.stop()
                 
-                # If auto-play is active and queue is empty, get more recommendations immediately
+                # If auto-play is active and queue is low, get more recommendations
                 if is_auto_play and music_cog and interaction.guild.id in music_cog.queue:
-                    if len(music_cog.queue[interaction.guild.id]) <= 1:  # Only current song or empty
+                    if len(music_cog.queue[interaction.guild.id]) <= 2:  # When queue is getting low
                         try:
                             last_played = music_cog.auto_play_mode.get(interaction.guild.id)
                             if last_played:
+                                # Add small delay to prevent rate limiting
+                                await asyncio.sleep(1)
                                 recommendations = await music_cog.get_youtube_recommendations(last_played)
-                                for rec in recommendations[:5]:  # Add 5 more songs
+                                for rec in recommendations[:3]:  # Add 3 more songs to prevent overwhelming
                                     music_cog.queue[interaction.guild.id].append((rec['title'], rec['webpage_url']))
+                                print(f"Auto-play: Added {len(recommendations)} more recommendations")
                         except Exception as rec_error:
                             print(f"Auto-play recommendation error: {rec_error}")
                 
@@ -338,7 +341,7 @@ class Music(commands.Cog):
         )
         await ctx.respond(embed=loading_embed)
 
-        # Search for the song with enhanced options and cookie handling
+        # Search for the song with enhanced options and bot detection avoidance
         ydl_opts = {
             'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
             'quiet': True,
@@ -349,18 +352,23 @@ class Music(commands.Cog):
             'default_search': 'ytsearch',
             'extract_flat': False,
             'age_limit': 18,
+            'cookiefile': None,
             'extractor_args': {
                 'youtube': {
                     'skip': ['dash', 'hls'],
-                    'player_skip': ['configs', 'webpage']
+                    'player_skip': ['configs', 'webpage'],
+                    'player_client': ['android', 'web']
                 }
             },
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
             }
         }
 
@@ -495,7 +503,7 @@ class Music(commands.Cog):
         if ctx.guild.id in getattr(self, 'auto_play_mode', {}):
             self.auto_play_mode[ctx.guild.id] = url
 
-        # Get audio source with multiple fallback methods
+        # Get audio source with multiple fallback methods and bot detection avoidance
         ydl_opts_play = {
             'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
             'quiet': True,
@@ -509,12 +517,26 @@ class Music(commands.Cog):
             'logtostderr': False,
             'age_limit': 18,
             'default_search': 'auto',
+            'cookiefile': None,
             'extractor_args': {
                 'youtube': {
-                    'skip': ['dash', 'hls']
+                    'skip': ['dash', 'hls'],
+                    'player_client': ['android', 'web']
                 }
             },
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Origin': 'https://www.youtube.com',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+            }
         }
 
         audio_url = None
@@ -605,14 +627,16 @@ class Music(commands.Cog):
             print(f"Playback error for {title}: {error_msg}")
 
             # Provide user-friendly error messages
-            if "Sign in to confirm you're not a bot" in error_msg:
-                user_error = "YouTube requires verification. Please try a different song or use a direct YouTube link."
+            if "Sign in to confirm you're not a bot" in error_msg or "not a bot" in error_msg.lower():
+                user_error = "YouTube is temporarily blocking requests. Skipping to next song..."
             elif "Video unavailable" in error_msg:
                 user_error = "This video is not available. It may be region-locked or private."
-            elif "not a bot" in error_msg.lower():
-                user_error = "YouTube is blocking requests. Please try again in a few minutes."
+            elif "Private video" in error_msg:
+                user_error = "This video is private and cannot be played."
+            elif "HTTP Error 429" in error_msg:
+                user_error = "Rate limited by YouTube. Please wait a moment before trying again."
             else:
-                user_error = f"Audio extraction failed: {error_msg[:100]}..."
+                user_error = f"Playback failed: {error_msg[:80]}..."
 
             error_embed = discord.Embed(
                 title="❌ Playback Error",
@@ -725,59 +749,115 @@ class Music(commands.Cog):
         await ctx.respond(embed=embed)
 
     async def get_youtube_recommendations(self, video_url):
-        """Get YouTube recommendations based on a video URL"""
+        """Get YouTube recommendations based on a video URL with improved error handling"""
         try:
+            # Enhanced options to avoid bot detection
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
                 'extractflat': False,
                 'nocheckcertificate': True,
                 'ignoreerrors': True,
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'cookiefile': None,
+                'extractor_args': {
+                    'youtube': {
+                        'skip': ['dash', 'hls'],
+                        'player_client': ['android', 'web']
+                    }
+                },
+                'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate'
+                }
             }
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=False)
+            related_videos = []
+            
+            # Method 1: Try to extract video info for recommendations
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(video_url, download=False)
+                    
+                    # Check if we have title and uploader info
+                    if info and 'title' in info:
+                        title = info['title']
+                        uploader = info.get('uploader', '')
+                        
+                        # Method 2: Search for similar content based on title and uploader
+                        if title:
+                            # Create more refined search queries
+                            search_queries = []
+                            
+                            # Extract key words from title (remove common words)
+                            title_words = title.lower().split()
+                            common_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', '-', 'official', 'video', 'music', 'ft', 'feat', 'featuring'}
+                            key_words = [word for word in title_words if word not in common_words and len(word) > 2]
+                            
+                            if key_words:
+                                # Use key words for better search
+                                search_queries.append(' '.join(key_words[:3]))  # Top 3 key words
+                                
+                            if uploader:
+                                search_queries.append(f"{uploader}")
+                                
+                            # Fallback searches
+                            search_queries.append(f"{title[:30]}")  # First 30 chars of title
+                            
+                            # Try each search query
+                            for query in search_queries[:2]:  # Limit to 2 searches
+                                try:
+                                    await asyncio.sleep(0.5)  # Small delay to avoid rate limiting
+                                    search_info = ydl.extract_info(f"ytsearch3:{query}", download=False)
+                                    if search_info and 'entries' in search_info:
+                                        for entry in search_info['entries']:
+                                            if (entry and 'webpage_url' in entry and 
+                                                entry['webpage_url'] != video_url and 
+                                                entry.get('title')):  # Don't recommend the same video and ensure title exists
+                                                related_videos.append({
+                                                    'title': entry['title'],
+                                                    'webpage_url': entry['webpage_url'],
+                                                    'uploader': entry.get('uploader', 'Unknown')
+                                                })
+                                                if len(related_videos) >= 5:
+                                                    break
+                                except Exception as search_error:
+                                    print(f"Search query '{query}' failed: {search_error}")
+                                    continue
 
-                # Try to get related videos from video info
-                related_videos = []
-
-                # Method 1: Check if there are related entries
-                if 'related_videos' in info:
-                    related_videos = info['related_videos'][:5]
-
-                # Method 2: Search for similar content based on title and uploader
-                if not related_videos and 'title' in info:
-                    title = info['title']
-                    uploader = info.get('uploader', '')
-
-                    # Create search queries based on the current video
-                    search_queries = [
-                        f"{title} similar",
-                        f"{uploader} music",
-                        f"{title.split()[0]} {title.split()[-1]}" if len(title.split()) > 1 else title
-                    ]
-
-                    for query in search_queries[:2]:  # Limit to 2 searches to avoid rate limiting
+                                if len(related_videos) >= 5:
+                                    break
+                                    
+            except Exception as info_error:
+                print(f"Info extraction failed: {info_error}")
+                
+            # Method 3: Fallback generic music search if no recommendations found
+            if not related_videos:
+                try:
+                    fallback_queries = ['popular music 2024', 'trending songs', 'top hits']
+                    for query in fallback_queries[:1]:  # Just try one fallback
                         try:
-                            search_info = ydl.extract_info(f"ytsearch3:{query}", download=False)
-                            if 'entries' in search_info:
-                                for entry in search_info['entries']:
-                                    if entry['webpage_url'] != video_url:  # Don't recommend the same video
-                                        related_videos.append({
-                                            'title': entry['title'],
-                                            'webpage_url': entry['webpage_url'],
-                                            'uploader': entry.get('uploader', 'Unknown')
-                                        })
-                                        if len(related_videos) >= 5:
-                                            break
-                        except:
-                            continue
-
-                        if len(related_videos) >= 5:
+                            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                                search_info = ydl.extract_info(f"ytsearch3:{query}", download=False)
+                                if search_info and 'entries' in search_info:
+                                    for entry in search_info['entries']:
+                                        if (entry and 'webpage_url' in entry and 
+                                            entry.get('title')):
+                                            related_videos.append({
+                                                'title': entry['title'],
+                                                'webpage_url': entry['webpage_url'],
+                                                'uploader': entry.get('uploader', 'Unknown')
+                                            })
+                                            if len(related_videos) >= 3:  # Less for fallback
+                                                break
+                        except Exception as fallback_error:
+                            print(f"Fallback search failed: {fallback_error}")
                             break
+                except Exception as fallback_method_error:
+                    print(f"Fallback method failed: {fallback_method_error}")
 
-                return related_videos[:5]  # Return max 5 recommendations
+            return related_videos[:5]  # Return max 5 recommendations
 
         except Exception as e:
             print(f"Recommendation error: {e}")
@@ -816,7 +896,7 @@ class Music(commands.Cog):
         )
         await ctx.respond(embed=loading_embed)
 
-        # Search for the seed song
+        # Search for the seed song with enhanced bot detection avoidance
         ydl_opts = {
             'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
             'quiet': True,
@@ -827,7 +907,19 @@ class Music(commands.Cog):
             'default_search': 'ytsearch',
             'extract_flat': False,
             'age_limit': 18,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'cookiefile': None,
+            'extractor_args': {
+                'youtube': {
+                    'skip': ['dash', 'hls'],
+                    'player_client': ['android', 'web']
+                }
+            },
+            'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate'
+            }
         }
 
         try:
