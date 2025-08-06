@@ -109,20 +109,30 @@ async def on_guild_join(guild):
         except:
             pass  # If we can't send, that's okay
 
-for foldername in os.listdir('./Cogs'): #for every folder in cogs
-    for filename in os.listdir(f'./Cogs/{foldername}'):# for every file in a folder in cogs
-        if filename.endswith('.py') and not filename in ['util.py', 'error.py']: #if the file is a python file and if the file is a cog
-            try:
-                bot.load_extension(f'Cogs.{foldername}.{filename[:-3]}')#load the extension
-                print(f"Loaded {foldername}.{filename[:-3]}")
-            except Exception as e:
-                print(f"Failed to load {foldername}.{filename[:-3]}: {e}")
+async def load_extensions():
+    """Load all extensions asynchronously"""
+    for foldername in os.listdir('./Cogs'): #for every folder in cogs
+        for filename in os.listdir(f'./Cogs/{foldername}'):# for every file in a folder in cogs
+            if filename.endswith('.py') and not filename in ['util.py', 'error.py']: #if the file is a python file and if the file is a cog
+                try:
+                    await bot.load_extension(f'Cogs.{foldername}.{filename[:-3]}')#load the extension
+                    print(f"Loaded {foldername}.{filename[:-3]}")
+                except Exception as e:
+                    print(f"Failed to load {foldername}.{filename[:-3]}: {e}")
+
+async def main():
+    """Main async function to load extensions and run bot"""
+    await load_extensions()
+    try:
+        await bot.start(TOKEN)
+    except discord.LoginFailure:
+        print("ERROR: Invalid TOKEN provided!")
+    except Exception as e:
+        print(f"ERROR: Bot failed to start: {e}")
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
 
 
 
-try:
-    bot.run(TOKEN)
-except discord.LoginFailure:
-    print("ERROR: Invalid TOKEN provided!")
-except Exception as e:
-    print(f"ERROR: Bot failed to start: {e}")
