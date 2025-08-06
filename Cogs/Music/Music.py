@@ -79,79 +79,150 @@ class MusicControls(discord.ui.View):
 
     @discord.ui.button(emoji="⏸️", style=discord.ButtonStyle.secondary, custom_id="pause")
     async def pause_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
-        if voice and voice.is_playing():
-            voice.pause()
-            embed = discord.Embed(
-                title="⏸️ Music Paused",
-                description="Music has been paused. Click ▶️ to resume.",
-                color=0xFFA500
-            )
-            await interaction.response.edit_message(embed=embed, view=self)
-        else:
-            await interaction.response.send_message("❌ No music is currently playing!", ephemeral=True)
-
-    @discord.ui.button(emoji="▶️", style=discord.ButtonStyle.success, custom_id="resume")
-    async def resume_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
-        if voice and voice.is_paused():
-            voice.resume()
-            embed = discord.Embed(
-                title="▶️ Music Resumed",
-                description="Music playback has been resumed!",
-                color=0x00FF00
-            )
-            await interaction.response.edit_message(embed=embed, view=self)
-        else:
-            await interaction.response.send_message("❌ No music is currently paused!", ephemeral=True)
-
-    @discord.ui.button(emoji="⏭️", style=discord.ButtonStyle.primary, custom_id="skip")
-    async def skip_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
-        if voice and voice.is_playing():
-            voice.stop()
-            embed = discord.Embed(
-                title="⏭️ Song Skipped",
-                description="Skipped to the next song in queue!",
-                color=0x3498DB
-            )
-            await interaction.response.edit_message(embed=embed, view=self)
-        else:
-            await interaction.response.send_message("❌ No music is currently playing!", ephemeral=True)
-
-    @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger, custom_id="stop")
-    async def stop_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
-        if voice:
-            music_cog = self.bot.get_cog('Music')
-            if music_cog and hasattr(music_cog, 'queue') and interaction.guild.id in music_cog.queue:
-                music_cog.queue[interaction.guild.id].clear()
-            await voice.disconnect()
-            embed = discord.Embed(
-                title="⏹️ Music Stopped",
-                description="Music stopped and queue cleared. Disconnected from voice channel.",
-                color=0xFF0000
-            )
-            await interaction.response.edit_message(embed=embed, view=None)
-        else:
-            await interaction.response.send_message("❌ Bot is not connected to a voice channel!", ephemeral=True)
-
-    @discord.ui.button(emoji="🔀", style=discord.ButtonStyle.secondary, custom_id="shuffle")
-    async def shuffle_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        music_cog = self.bot.get_cog('Music')
-        if music_cog and hasattr(music_cog, 'queue') and interaction.guild.id in music_cog.queue:
-            if len(music_cog.queue[interaction.guild.id]) > 1:
-                random.shuffle(music_cog.queue[interaction.guild.id])
+        try:
+            voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
+            if voice and voice.is_playing():
+                voice.pause()
                 embed = discord.Embed(
-                    title="🔀 Queue Shuffled",
-                    description=f"Shuffled {len(music_cog.queue[interaction.guild.id])} songs in the queue!",
-                    color=0x9B59B6
+                    title="⏸️ Music Paused",
+                    description="Music has been paused. Click ▶️ to resume.",
+                    color=0xFFA500
                 )
                 await interaction.response.edit_message(embed=embed, view=self)
             else:
-                await interaction.response.send_message("❌ Need at least 2 songs in queue to shuffle!", ephemeral=True)
-        else:
-            await interaction.response.send_message("❌ No songs in queue!", ephemeral=True)
+                await interaction.response.send_message("❌ No music is currently playing!", ephemeral=True)
+        except discord.NotFound:
+            # Interaction already responded to or expired
+            pass
+        except Exception as e:
+            print(f"Pause button error: {e}")
+            try:
+                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
+            except:
+                pass
+
+    @discord.ui.button(emoji="▶️", style=discord.ButtonStyle.success, custom_id="resume")
+    async def resume_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        try:
+            voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
+            if voice and voice.is_paused():
+                voice.resume()
+                embed = discord.Embed(
+                    title="▶️ Music Resumed",
+                    description="Music playback has been resumed!",
+                    color=0x00FF00
+                )
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                await interaction.response.send_message("❌ No music is currently paused!", ephemeral=True)
+        except discord.NotFound:
+            # Interaction already responded to or expired
+            pass
+        except Exception as e:
+            print(f"Resume button error: {e}")
+            try:
+                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
+            except:
+                pass
+
+    @discord.ui.button(emoji="⏭️", style=discord.ButtonStyle.primary, custom_id="skip")
+    async def skip_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        try:
+            voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
+            if voice and (voice.is_playing() or voice.is_paused()):
+                # Check if auto-play is active
+                music_cog = self.bot.get_cog('Music')
+                is_auto_play = (music_cog and hasattr(music_cog, 'auto_play_mode') and 
+                               interaction.guild.id in music_cog.auto_play_mode)
+                
+                voice.stop()
+                
+                # If auto-play is active and queue is empty, get more recommendations immediately
+                if is_auto_play and music_cog and interaction.guild.id in music_cog.queue:
+                    if len(music_cog.queue[interaction.guild.id]) <= 1:  # Only current song or empty
+                        try:
+                            last_played = music_cog.auto_play_mode.get(interaction.guild.id)
+                            if last_played:
+                                recommendations = await music_cog.get_youtube_recommendations(last_played)
+                                for rec in recommendations[:5]:  # Add 5 more songs
+                                    music_cog.queue[interaction.guild.id].append((rec['title'], rec['webpage_url']))
+                        except Exception as rec_error:
+                            print(f"Auto-play recommendation error: {rec_error}")
+                
+                embed = discord.Embed(
+                    title="⏭️ Song Skipped",
+                    description="Skipped to the next song in queue!" + 
+                               ("\n🎲 Auto-play: Getting more recommendations..." if is_auto_play else ""),
+                    color=0x3498DB
+                )
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                await interaction.response.send_message("❌ No music is currently playing!", ephemeral=True)
+        except discord.NotFound:
+            # Interaction already responded to or expired
+            pass
+        except Exception as e:
+            print(f"Skip button error: {e}")
+            try:
+                await interaction.response.send_message("❌ An error occurred while skipping!", ephemeral=True)
+            except:
+                pass
+
+    @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger, custom_id="stop")
+    async def stop_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        try:
+            voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
+            if voice:
+                music_cog = self.bot.get_cog('Music')
+                if music_cog and hasattr(music_cog, 'queue') and interaction.guild.id in music_cog.queue:
+                    music_cog.queue[interaction.guild.id].clear()
+                if music_cog and hasattr(music_cog, 'auto_play_mode') and interaction.guild.id in music_cog.auto_play_mode:
+                    del music_cog.auto_play_mode[interaction.guild.id]
+                await voice.disconnect()
+                embed = discord.Embed(
+                    title="⏹️ Music Stopped",
+                    description="Music stopped and queue cleared. Disconnected from voice channel.",
+                    color=0xFF0000
+                )
+                await interaction.response.edit_message(embed=embed, view=None)
+            else:
+                await interaction.response.send_message("❌ Bot is not connected to a voice channel!", ephemeral=True)
+        except discord.NotFound:
+            # Interaction already responded to or expired
+            pass
+        except Exception as e:
+            print(f"Stop button error: {e}")
+            try:
+                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
+            except:
+                pass
+
+    @discord.ui.button(emoji="🔀", style=discord.ButtonStyle.secondary, custom_id="shuffle")
+    async def shuffle_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        try:
+            music_cog = self.bot.get_cog('Music')
+            if music_cog and hasattr(music_cog, 'queue') and interaction.guild.id in music_cog.queue:
+                if len(music_cog.queue[interaction.guild.id]) > 1:
+                    random.shuffle(music_cog.queue[interaction.guild.id])
+                    embed = discord.Embed(
+                        title="🔀 Queue Shuffled",
+                        description=f"Shuffled {len(music_cog.queue[interaction.guild.id])} songs in the queue!",
+                        color=0x9B59B6
+                    )
+                    await interaction.response.edit_message(embed=embed, view=self)
+                else:
+                    await interaction.response.send_message("❌ Need at least 2 songs in queue to shuffle!", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ No songs in queue!", ephemeral=True)
+        except discord.NotFound:
+            # Interaction already responded to or expired
+            pass
+        except Exception as e:
+            print(f"Shuffle button error: {e}")
+            try:
+                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
+            except:
+                pass
 
 class QueueView(discord.ui.View):
     def __init__(self, bot, guild_id, page=0):
@@ -280,10 +351,17 @@ class Music(commands.Cog):
             'age_limit': 18,
             'extractor_args': {
                 'youtube': {
-                    'skip': ['dash', 'hls']
+                    'skip': ['dash', 'hls'],
+                    'player_skip': ['configs', 'webpage']
                 }
             },
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            }
         }
 
         try:
@@ -355,6 +433,11 @@ class Music(commands.Cog):
 
         # Add to queue
         self.queue[ctx.guild.id].append((title, url))
+        
+        # Track the song for potential auto-play recommendations
+        if not hasattr(self, 'last_played'):
+            self.last_played = {}
+        self.last_played[ctx.guild.id] = url
 
         # If not currently playing, start playing
         if not voice.is_playing() and not voice.is_paused():
@@ -377,18 +460,30 @@ class Music(commands.Cog):
 
     async def play_next(self, ctx, voice):
         """Play the next song in queue"""
+        # Check if voice is still connected
+        if not voice or not voice.is_connected():
+            print("Voice client disconnected, cannot continue playing")
+            return
+            
         if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
             # Auto-play mode: If queue is empty, try to get more recommendations
             if hasattr(self, 'auto_play_mode') and ctx.guild.id in getattr(self, 'auto_play_mode', {}):
                 last_played = getattr(self, 'auto_play_mode', {}).get(ctx.guild.id)
                 if last_played:
+                    print(f"Auto-play mode: Getting recommendations for {last_played}")
                     new_recommendations = await self.get_youtube_recommendations(last_played)
                     if new_recommendations:
-                        for rec in new_recommendations[:3]:  # Add 3 more songs
+                        # Initialize queue if it doesn't exist
+                        if ctx.guild.id not in self.queue:
+                            self.queue[ctx.guild.id] = []
+                        for rec in new_recommendations[:5]:  # Add 5 more songs for better continuity
                             self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
+                        print(f"Auto-play: Added {len(new_recommendations)} recommendations")
                         # Continue playing
                         if self.queue[ctx.guild.id]:
                             await self.play_next(ctx, voice)
+                    else:
+                        print("Auto-play: No recommendations found, stopping")
             return
 
         title, url = self.queue[ctx.guild.id].pop(0)
@@ -553,18 +648,28 @@ class Music(commands.Cog):
     @slash_command(description="📝 View the music queue with interactive navigation")
     async def queue(self, ctx):
         """Display music queue with pagination"""
-        if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
-            embed = discord.Embed(
-                title="📝 Queue Empty",
-                description="No songs in the queue! Use `/play` to add some music.",
-                color=0xFF0000
-            )
-            await ctx.respond(embed=embed)
-            return
+        try:
+            if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+                embed = discord.Embed(
+                    title="📝 Queue Empty",
+                    description="No songs in the queue! Use `/play` to add some music.",
+                    color=0xFF0000
+                )
+                await ctx.respond(embed=embed)
+                return
 
-        view = QueueView(self.bot, ctx.guild.id)
-        embed = view.create_queue_embed()
-        await ctx.respond(embed=embed, view=view)
+            view = QueueView(self.bot, ctx.guild.id)
+            embed = view.create_queue_embed()
+            await ctx.respond(embed=embed, view=view)
+        except discord.NotFound:
+            # Interaction already responded to or expired
+            pass
+        except Exception as e:
+            print(f"Queue command error: {e}")
+            try:
+                await ctx.respond("❌ An error occurred while displaying the queue!", ephemeral=True)
+            except:
+                pass
 
     @slash_command(description="⏹️ Stop music and clear queue")
     async def stop(self, ctx):
@@ -775,11 +880,16 @@ class Music(commands.Cog):
 
         # Add seed song to queue
         self.queue[ctx.guild.id].append((seed_title, seed_url))
+        
+        # Enable auto-play mode for this guild
+        if not hasattr(self, 'auto_play_mode'):
+            self.auto_play_mode = {}
+        self.auto_play_mode[ctx.guild.id] = seed_url
 
         # Get recommendations based on the seed song
         update_embed = discord.Embed(
             title="🎲 Getting Recommendations...",
-            description=f"Added **{seed_title}** to queue\nFinding similar songs...",
+            description=f"Added **{seed_title}** to queue\nFinding similar songs...\n\n🎲 **Auto-play mode activated!**",
             color=0x9B59B6
         )
         await ctx.edit(embed=update_embed)
