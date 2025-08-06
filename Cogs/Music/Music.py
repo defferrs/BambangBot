@@ -308,9 +308,9 @@ class Music(commands.Cog):
             print(f"Search error: {e}")
             return None
 
-    @slash_command(description="🎵 Play music from YouTube with interactive controls")
+    @slash_command(description="🎵 Play music from YouTube with auto-play enabled")
     async def play(self, ctx, *, query: Option(str, "Song name or YouTube URL")):
-        """Play music with modern interactive controls"""
+        """Play music with auto-play enabled by default"""
 
         # Check all dependencies at runtime
         deps_ready, deps_message = check_voice_dependencies()
@@ -335,9 +335,9 @@ class Music(commands.Cog):
 
         # Loading embed
         loading_embed = discord.Embed(
-            title="🔍 Searching...",
-            description=f"Looking for: **{query}**",
-            color=0xFFA500
+            title="🎲 Auto-Play Starting...",
+            description=f"Finding **{query}** and enabling auto-play...",
+            color=0x9B59B6
         )
         await ctx.respond(embed=loading_embed)
 
@@ -442,26 +442,51 @@ class Music(commands.Cog):
         # Add to queue
         self.queue[ctx.guild.id].append((title, url))
         
+        # Enable auto-play mode automatically
+        if not hasattr(self, 'auto_play_mode'):
+            self.auto_play_mode = {}
+        self.auto_play_mode[ctx.guild.id] = url
+        
         # Track the song for potential auto-play recommendations
         if not hasattr(self, 'last_played'):
             self.last_played = {}
         self.last_played[ctx.guild.id] = url
 
+        # Get recommendations and add to queue
+        update_embed = discord.Embed(
+            title="🎲 Getting Recommendations...",
+            description=f"Added **{title}** to queue\nFinding similar songs...\n\n🎲 **Auto-play mode activated!**",
+            color=0x9B59B6
+        )
+        await ctx.edit(embed=update_embed)
+
+        recommendations = await self.get_youtube_recommendations(url)
+        
+        # Add recommendations to queue
+        for rec in recommendations:
+            self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
+
         # If not currently playing, start playing
         if not voice.is_playing() and not voice.is_paused():
             await self.play_next(ctx, voice)
         else:
-            # Song added to queue
+            # Song added to queue with auto-play info
             embed = discord.Embed(
-                title="📝 Added to Queue",
-                description=f"**{title}**\n\nPosition in queue: **{len(self.queue[ctx.guild.id])}**",
-                color=0x00FF00
+                title="🎲 Added to Auto-Play Queue",
+                description=f"**{title}**\n\nPosition in queue: **{len(self.queue[ctx.guild.id]) - len(recommendations)}**",
+                color=0x9B59B6
             )
             embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}" if duration else "Unknown", inline=True)
             embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
+            embed.add_field(name="Mode", value="🎲 Auto-Play", inline=True)
+            
+            if recommendations:
+                rec_list = "\n".join([f"• {rec['title'][:30]}{'...' if len(rec['title']) > 30 else ''}" for rec in recommendations[:3]])
+                embed.add_field(name="🎵 Recommendations Added", value=rec_list, inline=False)
+            
             if thumbnail:
                 embed.set_thumbnail(url=thumbnail)
-            embed.set_footer(text="🎵 Your song will play when queue reaches it")
+            embed.set_footer(text="🎲 Auto-play will continue with recommendations after current songs")
 
             view = MusicControls(self.bot)
             await ctx.edit(embed=embed, view=view)
@@ -863,9 +888,9 @@ class Music(commands.Cog):
             print(f"Recommendation error: {e}")
             return []
 
-    @slash_command(description="🎲 Auto-play with YouTube recommendations")
+    @slash_command(description="🎲 Advanced auto-play with custom seed song")
     async def auto_play(self, ctx, *, seed_query: Option(str, "Starting song or search term for recommendations")):
-        """Auto-play system with YouTube recommendations"""
+        """Advanced auto-play system with custom seed song (alternative to /play)"""
 
         # Check dependencies first
         deps_ready, deps_message = check_voice_dependencies()
