@@ -143,6 +143,77 @@ class ModerationActions(discord.ui.View):
         
         await interaction.response.edit_message(embed=embed, view=self)
 
+    @discord.ui.button(label="⏰ Timeout", style=discord.ButtonStyle.danger, emoji="⏰")
+    async def timeout_member(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message("❌ You don't have permission to timeout members!", ephemeral=True)
+            return
+
+        if self.member.is_timed_out():
+            await interaction.response.send_message("❌ Member is already timed out!", ephemeral=True)
+            return
+
+        # Default 10 minute timeout
+        timeout_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=10)
+        
+        try:
+            await self.member.timeout(timeout_until, reason=f"Timed out by {interaction.user} via quick action")
+            
+            embed = discord.Embed(
+                title="⏰ Member Timed Out",
+                description=f"{self.member.mention} has been timed out for 10 minutes by {interaction.user.mention}",
+                color=0xFF0000
+            )
+            embed.add_field(name="Duration", value="10 minutes", inline=True)
+            
+            await interaction.response.edit_message(embed=embed, view=self)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Could not timeout member: {str(e)}", ephemeral=True)
+
+    @discord.ui.button(label="🔨 Ban", style=discord.ButtonStyle.danger, emoji="🔨")
+    async def ban_member(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.ban_members:
+            await interaction.response.send_message("❌ You don't have permission to ban members!", ephemeral=True)
+            return
+
+        if self.member.top_role >= interaction.user.top_role and interaction.user != interaction.guild.owner:
+            await interaction.response.send_message("❌ You cannot ban someone with a role equal to or higher than yours!", ephemeral=True)
+            return
+
+        # Create confirmation for ban
+        embed = discord.Embed(
+            title="🔨 Confirm Ban",
+            description=f"Are you sure you want to ban {self.member.mention}?",
+            color=0xFFA500
+        )
+        embed.add_field(name="⚠️ Warning", value="This action is permanent! Use /unban to reverse.", inline=False)
+
+        view = ConfirmationView("Ban", self.member, interaction.user)
+        await interaction.response.edit_message(embed=embed, view=view)
+        
+        await view.wait()
+        
+        if view.confirmed:
+            try:
+                await self.member.ban(reason=f"Banned by {interaction.user} via quick action")
+                
+                embed = discord.Embed(
+                    title="🔨 Member Banned",
+                    description=f"{self.member.mention} has been banned by {interaction.user.mention}",
+                    color=0x00FF00
+                )
+                
+                await interaction.edit_original_response(embed=embed, view=None)
+                
+            except Exception as e:
+                embed = discord.Embed(
+                    title="❌ Ban Failed",
+                    description=f"Could not ban {self.member.mention}\n\nError: {str(e)}",
+                    color=0xFF0000
+                )
+                await interaction.edit_original_response(embed=embed, view=None)
+
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -338,6 +409,387 @@ class Moderation(commands.Cog):
         embed.set_footer(text="📊 Warning system • Keep your server safe")
         
         await ctx.respond(embed=embed)
+
+    @slash_command(description="⏰ Timeout member for specified duration")
+    async def timeout(self, ctx, member: Option(discord.Member, "Member to timeout"), minutes: Option(int, "Duration in minutes (1-40320)", min_value=1, max_value=40320), reason: Option(str, "Reason for timeout", required=False, default="No reason provided")):
+        """Timeout member with interactive confirmation"""
+        if not ctx.author.guild_permissions.moderate_members:
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="You don't have permission to timeout members!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+            embed = discord.Embed(
+                title="❌ Cannot Timeout",
+                description="You cannot timeout someone with a role equal to or higher than yours!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        if member.is_timed_out():
+            embed = discord.Embed(
+                title="❌ Already Timed Out",
+                description=f"{member.mention} is already timed out!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        # Calculate timeout duration
+        timeout_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=minutes)
+        
+        embed = discord.Embed(
+            title="⏰ Confirm Timeout",
+            description=f"Are you sure you want to timeout {member.mention}?",
+            color=0xFFA500
+        )
+        embed.add_field(name="Duration", value=f"{minutes} minutes", inline=True)
+        embed.add_field(name="Until", value=timeout_until.strftime('%Y-%m-%d %H:%M UTC'), inline=True)
+        embed.add_field(name="Reason", value=reason, inline=False)
+
+        view = ConfirmationView("Timeout", member, ctx.author)
+        await ctx.respond(embed=embed, view=view)
+        
+        await view.wait()
+        
+        if view.confirmed:
+            try:
+                await member.timeout(timeout_until, reason=f"Timed out by {ctx.author} - {reason}")
+                
+                embed = discord.Embed(
+                    title="⏰ Member Timed Out",
+                    description=f"{member.mention} has been timed out",
+                    color=0x00FF00
+                )
+                embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+                embed.add_field(name="Duration", value=f"{minutes} minutes", inline=True)
+                embed.add_field(name="Reason", value=reason, inline=False)
+                
+                await ctx.edit(embed=embed, view=None)
+                
+            except Exception as e:
+                embed = discord.Embed(
+                    title="❌ Timeout Failed",
+                    description=f"Could not timeout {member.mention}\n\nError: {str(e)}",
+                    color=0xFF0000
+                )
+                await ctx.edit(embed=embed, view=None)
+
+    @slash_command(description="🔓 Remove timeout from member")
+    async def untimeout(self, ctx, member: Option(discord.Member, "Member to remove timeout from"), reason: Option(str, "Reason for removing timeout", required=False, default="No reason provided")):
+        """Remove timeout from member"""
+        if not ctx.author.guild_permissions.moderate_members:
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="You don't have permission to manage timeouts!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        if not member.is_timed_out():
+            embed = discord.Embed(
+                title="❌ Not Timed Out",
+                description=f"{member.mention} is not currently timed out!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        try:
+            await member.timeout(None, reason=f"Timeout removed by {ctx.author} - {reason}")
+            
+            embed = discord.Embed(
+                title="🔓 Timeout Removed",
+                description=f"Timeout has been removed from {member.mention}",
+                color=0x00FF00
+            )
+            embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+            embed.add_field(name="Reason", value=reason, inline=True)
+            
+            await ctx.respond(embed=embed)
+            
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Untimeout Failed",
+                description=f"Could not remove timeout from {member.mention}\n\nError: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+
+    @slash_command(description="🔨 Ban member permanently")
+    async def ban(self, ctx, member: Option(discord.Member, "Member to ban"), reason: Option(str, "Reason for ban", required=False, default="No reason provided"), delete_messages: Option(int, "Delete messages from last X days (0-7)", min_value=0, max_value=7, required=False, default=0)):
+        """Ban member with interactive confirmation"""
+        if not ctx.author.guild_permissions.ban_members:
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="You don't have permission to ban members!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+            embed = discord.Embed(
+                title="❌ Cannot Ban",
+                description="You cannot ban someone with a role equal to or higher than yours!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="🔨 Confirm Ban",
+            description=f"Are you sure you want to ban {member.mention}?",
+            color=0xFFA500
+        )
+        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.add_field(name="Delete Messages", value=f"Last {delete_messages} days" if delete_messages > 0 else "None", inline=True)
+        embed.add_field(name="⚠️ Warning", value="This is permanent! Use /unban to reverse.", inline=False)
+
+        view = ConfirmationView("Ban", member, ctx.author)
+        await ctx.respond(embed=embed, view=view)
+        
+        await view.wait()
+        
+        if view.confirmed:
+            try:
+                await member.ban(reason=f"Banned by {ctx.author} - {reason}", delete_message_days=delete_messages)
+                
+                embed = discord.Embed(
+                    title="🔨 Member Banned",
+                    description=f"{member.mention} has been banned from the server",
+                    color=0x00FF00
+                )
+                embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+                embed.add_field(name="Reason", value=reason, inline=True)
+                embed.add_field(name="Messages Deleted", value=f"Last {delete_messages} days" if delete_messages > 0 else "None", inline=True)
+                
+                await ctx.edit(embed=embed, view=None)
+                
+            except Exception as e:
+                embed = discord.Embed(
+                    title="❌ Ban Failed",
+                    description=f"Could not ban {member.mention}\n\nError: {str(e)}",
+                    color=0xFF0000
+                )
+                await ctx.edit(embed=embed, view=None)
+
+    @slash_command(description="🔓 Unban user by ID")
+    async def unban(self, ctx, user_id: Option(str, "User ID to unban"), reason: Option(str, "Reason for unban", required=False, default="No reason provided")):
+        """Unban user by ID"""
+        if not ctx.author.guild_permissions.ban_members:
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="You don't have permission to unban members!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            embed = discord.Embed(
+                title="❌ Invalid User ID",
+                description="Please provide a valid user ID (numbers only)!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        try:
+            user = await self.bot.fetch_user(user_id)
+            await ctx.guild.unban(user, reason=f"Unbanned by {ctx.author} - {reason}")
+            
+            embed = discord.Embed(
+                title="🔓 User Unbanned",
+                description=f"{user.mention} (`{user.id}`) has been unbanned",
+                color=0x00FF00
+            )
+            embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+            embed.add_field(name="Reason", value=reason, inline=True)
+            embed.set_thumbnail(url=user.display_avatar.url)
+            
+            await ctx.respond(embed=embed)
+            
+        except discord.NotFound:
+            embed = discord.Embed(
+                title="❌ User Not Found",
+                description="User not found or not banned!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Unban Failed",
+                description=f"Could not unban user\n\nError: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+
+    @slash_command(description="⚠️ Issue warning to member")
+    async def warn(self, ctx, member: Option(discord.Member, "Member to warn"), reason: Option(str, "Reason for warning")):
+        """Issue warning to member"""
+        if not ctx.author.guild_permissions.kick_members:
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="You don't have permission to warn members!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        # Load warnings
+        warnings_file = "Cogs/Moderation/reports.json"
+        try:
+            with open(warnings_file, 'r') as f:
+                warnings = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            warnings = {}
+
+        guild_id = str(ctx.guild.id)
+        member_id = str(member.id)
+
+        if guild_id not in warnings:
+            warnings[guild_id] = {}
+        if member_id not in warnings[guild_id]:
+            warnings[guild_id][member_id] = []
+
+        # Add warning
+        warning_data = {
+            "moderator": str(ctx.author.id),
+            "reason": reason,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        warnings[guild_id][member_id].append(warning_data)
+
+        # Save warnings
+        os.makedirs("Cogs/Moderation", exist_ok=True)
+        with open(warnings_file, 'w') as f:
+            json.dump(warnings, f, indent=2)
+
+        embed = discord.Embed(
+            title="⚠️ Warning Issued",
+            description=f"{member.mention} has been warned",
+            color=0xFFA500
+        )
+        embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+        embed.add_field(name="Total Warnings", value=len(warnings[guild_id][member_id]), inline=True)
+        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text="⚠️ Warning system • Keep track of member behavior")
+        
+        await ctx.respond(embed=embed)
+
+    @slash_command(description="🐌 Set slowmode for channel")
+    async def slowmode(self, ctx, seconds: Option(int, "Slowmode delay in seconds (0-21600)", min_value=0, max_value=21600), channel: Option(discord.TextChannel, "Channel to apply slowmode to", required=False)):
+        """Set slowmode for channel"""
+        if not ctx.author.guild_permissions.manage_channels:
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="You don't have permission to manage channels!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        target_channel = channel or ctx.channel
+
+        try:
+            await target_channel.edit(slowmode_delay=seconds)
+            
+            if seconds == 0:
+                embed = discord.Embed(
+                    title="🚀 Slowmode Disabled",
+                    description=f"Slowmode has been disabled in {target_channel.mention}",
+                    color=0x00FF00
+                )
+            else:
+                embed = discord.Embed(
+                    title="🐌 Slowmode Enabled",
+                    description=f"Slowmode set to **{seconds} seconds** in {target_channel.mention}",
+                    color=0x00FF00
+                )
+                
+            embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+            embed.add_field(name="Channel", value=target_channel.mention, inline=True)
+            
+            await ctx.respond(embed=embed)
+            
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Slowmode Failed",
+                description=f"Could not set slowmode\n\nError: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+
+    @slash_command(description="📋 View banned users")
+    async def banlist(self, ctx):
+        """View list of banned users"""
+        if not ctx.author.guild_permissions.ban_members:
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="You don't have permission to view banned members!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+
+        try:
+            banned_users = []
+            async for ban_entry in ctx.guild.bans():
+                banned_users.append(ban_entry)
+
+            if not banned_users:
+                embed = discord.Embed(
+                    title="📋 No Banned Users",
+                    description="There are no banned users in this server",
+                    color=0x00FF00
+                )
+                await ctx.respond(embed=embed)
+                return
+
+            embed = discord.Embed(
+                title="📋 Banned Users",
+                description=f"Total banned users: **{len(banned_users)}**",
+                color=0xFF0000
+            )
+
+            # Show first 10 banned users
+            for i, ban_entry in enumerate(banned_users[:10]):
+                user = ban_entry.user
+                reason = ban_entry.reason or "No reason provided"
+                embed.add_field(
+                    name=f"🔨 {user.name}#{user.discriminator}",
+                    value=f"**ID:** {user.id}\n**Reason:** {reason[:100]}{'...' if len(reason) > 100 else ''}",
+                    inline=False
+                )
+
+            if len(banned_users) > 10:
+                embed.add_field(
+                    name="📝 Note",
+                    value=f"Showing 10 out of {len(banned_users)} banned users",
+                    inline=False
+                )
+
+            embed.set_footer(text="📋 Use /unban with user ID to unban")
+            
+            await ctx.respond(embed=embed)
+            
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Failed to Load Ban List",
+                description=f"Could not retrieve ban list\n\nError: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
 
 def setup(bot):
     bot.add_cog(Moderation(bot))
