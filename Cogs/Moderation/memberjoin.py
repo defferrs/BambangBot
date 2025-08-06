@@ -285,6 +285,7 @@ class memberjoin(commands.Cog):
     async def edit_welcome_message(self, ctx):
         """Edit template pesan selamat datang menggunakan modal input teks"""
         guild_settings = self.get_guild_settings(ctx.guild.id)
+        cog_instance = self
         
         class WelcomeMessageModal(discord.ui.Modal):
             def __init__(self):
@@ -317,7 +318,7 @@ class memberjoin(commands.Cog):
                 
                 # Update the settings
                 guild_settings["welcome_message"] = new_message
-                self.parent.save_settings()
+                cog_instance.save_settings()
                 
                 # Show preview
                 preview_message = new_message.format(
@@ -339,7 +340,6 @@ class memberjoin(commands.Cog):
                 await interaction.response.send_message(embed=embed, ephemeral=True)
         
         modal = WelcomeMessageModal()
-        modal.parent = self
         await ctx.send_modal(modal)
 
     @slash_command(name="sync_commands")
