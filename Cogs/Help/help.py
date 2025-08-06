@@ -1,7 +1,7 @@
 
 import discord
 from discord.ext import commands
-from discord.commands import slash_command
+from discord import app_commands
 
 class CategorySelect(discord.ui.Select):
     def __init__(self):

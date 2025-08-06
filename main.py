@@ -55,11 +55,8 @@ async def on_ready():
         print(f"⚠️ Opus check failed: {e}")
     
     try:
-        synced = await bot.sync_commands()
-        if synced is not None:
-            print(f"✅ Synced {len(synced)} slash commands")
-        else:
-            print("✅ Commands synced successfully")
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} slash commands")
         print(f'🚀 Bot is fully operational with interactive features!')
     except Exception as e:
         print(f"❌ Failed to sync commands: {e}")

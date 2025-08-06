@@ -1,7 +1,7 @@
 
 import discord
 from discord.ext import commands
-from discord.commands import slash_command, Option
+from discord import app_commands
 import asyncio
 import random
 import yt_dlp
@@ -220,18 +220,18 @@ class Music(commands.Cog):
             print(f"Search error: {e}")
             return None
 
-    @slash_command(description="🎵 Play music from YouTube with interactive controls")
-    async def play(self, ctx, *, query: Option(str, "Song name or YouTube URL")):
+    @app_commands.command(name="play", description="🎵 Play music from YouTube with interactive controls")
+    async def play(self, interaction: discord.Interaction, *, query: str):
         """Play music with modern interactive controls"""
         
         # Check if user is in voice channel
-        if not ctx.author.voice:
+        if not interaction.user.voice:
             embed = discord.Embed(
                 title="❌ Voice Channel Required",
                 description="You need to join a voice channel first!",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed)
+            await interaction.response.send_message(embed=embed)
             return
 
         # Loading embed
@@ -240,7 +240,7 @@ class Music(commands.Cog):
             description=f"Looking for: **{query}**",
             color=0xFFA500
         )
-        await ctx.respond(embed=loading_embed)
+        await interaction.response.send_message(embed=loading_embed)
 
         # Search for the song with enhanced options and cookie handling
         ydl_opts = {
@@ -281,7 +281,7 @@ class Music(commands.Cog):
                 description=f"Could not find or play: **{query}**\n\nError: {str(e)}",
                 color=0xFF0000
             )
-            await ctx.edit(embed=error_embed)
+            await interaction.edit_original_response(embed=error_embed)
             return
 
         # Check voice dependencies
@@ -317,8 +317,8 @@ class Music(commands.Cog):
                     return
 
         # Connect to voice channel with better error handling
-        voice_channel = ctx.author.voice.channel
-        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
+        voice_channel = interaction.user.voice.channel
+        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
 
         try:
             if not voice:
@@ -338,7 +338,7 @@ class Music(commands.Cog):
                         description=f"Could not connect to voice channel: {str(reconnect_error)}",
                         color=0xFF0000
                     )
-                    await ctx.edit(embed=error_embed)
+                    await interaction.edit_original_response(embed=error_embed)
                     return
             else:
                 error_embed = discord.Embed(
@@ -346,7 +346,7 @@ class Music(commands.Cog):
                     description=f"Could not connect to voice channel: {str(e)}",
                     color=0xFF0000
                 )
-                await ctx.edit(embed=error_embed)
+                await interaction.edit_original_response(embed=error_embed)
                 return
         except Exception as e:
             error_embed = discord.Embed(
@@ -354,59 +354,59 @@ class Music(commands.Cog):
                 description=f"Could not connect to voice channel: {str(e)}",
                 color=0xFF0000
             )
-            await ctx.edit(embed=error_embed)
+            await interaction.edit_original_response(embed=error_embed)
             return
 
         # Initialize queue if not exists
-        if ctx.guild.id not in self.queue:
-            self.queue[ctx.guild.id] = []
+        if interaction.guild.id not in self.queue:
+            self.queue[interaction.guild.id] = []
 
         # Add to queue
-        self.queue[ctx.guild.id].append((title, url))
+        self.queue[interaction.guild.id].append((title, url))
 
         # If not currently playing, start playing
         if not voice.is_playing() and not voice.is_paused():
-            await self.play_next(ctx, voice)
+            await self.play_next(interaction, voice)
         else:
             # Song added to queue
             embed = discord.Embed(
                 title="📝 Added to Queue",
-                description=f"**{title}**\n\nPosition in queue: **{len(self.queue[ctx.guild.id])}**",
+                description=f"**{title}**\n\nPosition in queue: **{len(self.queue[interaction.guild.id])}**",
                 color=0x00FF00
             )
             embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}" if duration else "Unknown", inline=True)
-            embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
+            embed.add_field(name="Queue Length", value=f"{len(self.queue[interaction.guild.id])} songs", inline=True)
             if thumbnail:
                 embed.set_thumbnail(url=thumbnail)
             embed.set_footer(text="🎵 Your song will play when queue reaches it")
             
             view = MusicControls(self.bot)
-            await ctx.edit(embed=embed, view=view)
+            await interaction.edit_original_response(embed=embed, view=view)
 
-    async def play_next(self, ctx, voice):
+    async def play_next(self, interaction, voice):
         """Play the next song in queue"""
-        if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+        if interaction.guild.id not in self.queue or not self.queue[interaction.guild.id]:
             # Auto-play mode: If queue is empty, try to get more recommendations
-            if hasattr(self, 'auto_play_mode') and ctx.guild.id in getattr(self, 'auto_play_mode', {}):
-                last_played = getattr(self, 'auto_play_mode', {}).get(ctx.guild.id)
+            if hasattr(self, 'auto_play_mode') and interaction.guild.id in getattr(self, 'auto_play_mode', {}):
+                last_played = getattr(self, 'auto_play_mode', {}).get(interaction.guild.id)
                 if last_played:
                     new_recommendations = await self.get_youtube_recommendations(last_played)
                     if new_recommendations:
                         for rec in new_recommendations[:3]:  # Add 3 more songs
-                            self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
+                            self.queue[interaction.guild.id].append((rec['title'], rec['webpage_url']))
                         # Continue playing
-                        if self.queue[ctx.guild.id]:
-                            await self.play_next(ctx, voice)
+                        if self.queue[interaction.guild.id]:
+                            await self.play_next(interaction, voice)
             return
 
-        title, url = self.queue[ctx.guild.id].pop(0)
-        self.current_song[ctx.guild.id] = title
+        title, url = self.queue[interaction.guild.id].pop(0)
+        self.current_song[interaction.guild.id] = title
         
         # Track for auto-play mode
         if not hasattr(self, 'auto_play_mode'):
             self.auto_play_mode = {}
-        if ctx.guild.id in getattr(self, 'auto_play_mode', {}):
-            self.auto_play_mode[ctx.guild.id] = url
+        if interaction.guild.id in getattr(self, 'auto_play_mode', {}):
+            self.auto_play_mode[interaction.guild.id] = url
 
         # Get audio source with multiple fallback methods
         ydl_opts_play = {
@@ -494,7 +494,7 @@ class Music(commands.Cog):
                 raise Exception("Could not create audio source with any FFmpeg options")
             
             # Play audio
-            voice.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(ctx, voice), self.bot.loop))
+            voice.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(interaction, voice), self.bot.loop))
 
             # Now playing embed
             embed = discord.Embed(
@@ -503,15 +503,15 @@ class Music(commands.Cog):
                 color=0x1DB954
             )
             embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}" if duration else "Unknown", inline=True)
-            embed.add_field(name="Remaining", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
-            embed.add_field(name="Requested by", value=ctx.author.mention, inline=True)
+            embed.add_field(name="Remaining", value=f"{len(self.queue[interaction.guild.id])} songs", inline=True)
+            embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
             
             if thumbnail:
                 embed.set_thumbnail(url=thumbnail)
             embed.set_footer(text="🎵 Use the buttons below to control playback • Mobile optimized")
 
             view = MusicControls(self.bot)
-            await ctx.edit(embed=embed, view=view)
+            await interaction.edit_original_response(embed=embed, view=view)
 
         except Exception as e:
             error_msg = str(e)
@@ -534,53 +534,53 @@ class Music(commands.Cog):
             )
             
             # Check if there are more songs in queue
-            if self.queue[ctx.guild.id]:
+            if self.queue[interaction.guild.id]:
                 error_embed.add_field(
                     name="🔄 Auto-Skip", 
-                    value=f"Trying next song... ({len(self.queue[ctx.guild.id])} remaining)", 
+                    value=f"Trying next song... ({len(self.queue[interaction.guild.id])} remaining)", 
                     inline=False
                 )
-                await ctx.edit(embed=error_embed)
+                await interaction.edit_original_response(embed=error_embed)
                 
                 # Wait a moment before trying next song
                 await asyncio.sleep(3)
-                await self.play_next(ctx, voice)
+                await self.play_next(interaction, voice)
             else:
                 error_embed.add_field(
                     name="💡 Suggestion", 
                     value="Try searching for a different song or check if the video is publicly available.", 
                     inline=False
                 )
-                await ctx.edit(embed=error_embed)
+                await interaction.edit_original_response(embed=error_embed)
                 
                 # Disconnect after error if no more songs
                 if voice and voice.is_connected():
                     await asyncio.sleep(5)
                     await voice.disconnect()
 
-    @slash_command(description="📝 View the music queue with interactive navigation")
-    async def queue(self, ctx):
+    @app_commands.command(name="queue", description="📝 View the music queue with interactive navigation")
+    async def queue(self, interaction: discord.Interaction):
         """Display music queue with pagination"""
-        if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+        if interaction.guild.id not in self.queue or not self.queue[interaction.guild.id]:
             embed = discord.Embed(
                 title="📝 Queue Empty",
                 description="No songs in the queue! Use `/play` to add some music.",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed)
+            await interaction.response.send_message(embed=embed)
             return
 
-        view = QueueView(self.bot, ctx.guild.id)
+        view = QueueView(self.bot, interaction.guild.id)
         embed = view.create_queue_embed()
-        await ctx.respond(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view)
 
-    @slash_command(description="⏹️ Stop music and clear queue")
-    async def stop(self, ctx):
+    @app_commands.command(name="stop", description="⏹️ Stop music and clear queue")
+    async def stop(self, interaction: discord.Interaction):
         """Stop music with confirmation"""
-        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
+        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
         if voice:
-            if ctx.guild.id in self.queue:
-                self.queue[ctx.guild.id].clear()
+            if interaction.guild.id in self.queue:
+                self.queue[interaction.guild.id].clear()
             await voice.disconnect()
             
             embed = discord.Embed(
@@ -588,44 +588,45 @@ class Music(commands.Cog):
                 description="Music stopped, queue cleared, and disconnected from voice channel.",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed)
+            await interaction.response.send_message(embed=embed)
         else:
             embed = discord.Embed(
                 title="❌ Not Connected",
                 description="Bot is not connected to a voice channel!",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed)
+            await interaction.response.send_message(embed=embed)
 
-    @slash_command(description="🗑️ Remove a song from the queue")
-    async def remove(self, ctx, position: Option(int, "Position of song to remove (starting from 1)")):
+    @app_commands.command(name="remove", description="🗑️ Remove a song from the queue")
+    @app_commands.describe(position="Position of song to remove (starting from 1)")
+    async def remove(self, interaction: discord.Interaction, position: int):
         """Remove song from queue by position"""
-        if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+        if interaction.guild.id not in self.queue or not self.queue[interaction.guild.id]:
             embed = discord.Embed(
                 title="❌ Queue Empty",
                 description="No songs in the queue to remove!",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed)
+            await interaction.response.send_message(embed=embed)
             return
 
-        if position < 1 or position > len(self.queue[ctx.guild.id]):
+        if position < 1 or position > len(self.queue[interaction.guild.id]):
             embed = discord.Embed(
                 title="❌ Invalid Position",
-                description=f"Please provide a position between 1 and {len(self.queue[ctx.guild.id])}",
+                description=f"Please provide a position between 1 and {len(self.queue[interaction.guild.id])}",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed)
+            await interaction.response.send_message(embed=embed)
             return
 
-        removed_song = self.queue[ctx.guild.id].pop(position - 1)
+        removed_song = self.queue[interaction.guild.id].pop(position - 1)
         embed = discord.Embed(
             title="🗑️ Song Removed",
             description=f"Removed **{removed_song[0]}** from position {position}",
             color=0x00FF00
         )
-        embed.add_field(name="Remaining Songs", value=f"{len(self.queue[ctx.guild.id])} in queue", inline=True)
-        await ctx.respond(embed=embed)
+        embed.add_field(name="Remaining Songs", value=f"{len(self.queue[interaction.guild.id])} in queue", inline=True)
+        await interaction.response.send_message(embed=embed)
 
     async def get_youtube_recommendations(self, video_url):
         """Get YouTube recommendations based on a video URL"""
@@ -686,18 +687,19 @@ class Music(commands.Cog):
             print(f"Recommendation error: {e}")
             return []
 
-    @slash_command(description="🎲 Auto-play with YouTube recommendations")
-    async def auto_play(self, ctx, *, seed_query: Option(str, "Starting song or search term for recommendations")):
+    @app_commands.command(name="auto_play", description="🎲 Auto-play with YouTube recommendations")
+    @app_commands.describe(seed_query="Starting song or search term for recommendations")
+    async def auto_play(self, interaction: discord.Interaction, *, seed_query: str):
         """Auto-play system with YouTube recommendations"""
         
         # Check if user is in voice channel
-        if not ctx.author.voice:
+        if not interaction.user.voice:
             embed = discord.Embed(
                 title="❌ Voice Channel Required",
                 description="You need to join a voice channel first!",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed)
+            await interaction.response.send_message(embed=embed)
             return
 
         # Loading embed
@@ -706,7 +708,7 @@ class Music(commands.Cog):
             description=f"Finding **{seed_query}** and getting recommendations...",
             color=0x9B59B6
         )
-        await ctx.respond(embed=loading_embed)
+        await interaction.response.send_message(embed=loading_embed)
 
         # Search for the seed song
         ydl_opts = {
@@ -746,8 +748,8 @@ class Music(commands.Cog):
             return
 
         # Connect to voice channel
-        voice_channel = ctx.author.voice.channel
-        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
+        voice_channel = interaction.user.voice.channel
+        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
 
         try:
             if not voice:
@@ -760,18 +762,18 @@ class Music(commands.Cog):
                 description=f"Could not connect to voice channel: {str(e)}",
                 color=0xFF0000
             )
-            await ctx.edit(embed=error_embed)
+            await interaction.edit_original_response(embed=error_embed)
             return
 
         # Initialize queue if not exists
-        if ctx.guild.id not in self.queue:
-            self.queue[ctx.guild.id] = []
+        if interaction.guild.id not in self.queue:
+            self.queue[interaction.guild.id] = []
 
         # Clear existing queue for auto-play mode
-        self.queue[ctx.guild.id].clear()
+        self.queue[interaction.guild.id].clear()
 
         # Add seed song to queue
-        self.queue[ctx.guild.id].append((seed_title, seed_url))
+        self.queue[interaction.guild.id].append((seed_title, seed_url))
 
         # Get recommendations based on the seed song
         update_embed = discord.Embed(
@@ -779,17 +781,17 @@ class Music(commands.Cog):
             description=f"Added **{seed_title}** to queue\nFinding similar songs...",
             color=0x9B59B6
         )
-        await ctx.edit(embed=update_embed)
+        await interaction.edit_original_response(embed=update_embed)
 
         recommendations = await self.get_youtube_recommendations(seed_url)
         
         # Add recommendations to queue
         for rec in recommendations:
-            self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
+            self.queue[interaction.guild.id].append((rec['title'], rec['webpage_url']))
 
         # Start playing
         if not voice.is_playing() and not voice.is_paused():
-            await self.play_next(ctx, voice)
+            await self.play_next(interaction, voice)
         
         # Auto-play started embed
         embed = discord.Embed(
@@ -797,7 +799,7 @@ class Music(commands.Cog):
             description=f"**Now Playing:** {seed_title}\n\n**Recommendations Added:** {len(recommendations)} songs",
             color=0x9B59B6
         )
-        embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
+        embed.add_field(name="Queue Length", value=f"{len(self.queue[interaction.guild.id])} songs", inline=True)
         embed.add_field(name="Mode", value="🎲 Auto-Play", inline=True)
         embed.add_field(name="Based on", value=f"**{seed_title}**", inline=True)
         
@@ -812,7 +814,7 @@ class Music(commands.Cog):
         embed.set_footer(text="🎲 Auto-Play will continue with recommendations • Use buttons to control")
 
         view = MusicControls(self.bot)
-        await ctx.edit(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view)
 
 def setup(bot):
     bot.add_cog(Music(bot))

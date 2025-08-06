@@ -11,7 +11,7 @@ dependencies = [
     "yt-dlp>=2023.12.30",
     "pynacl[voice]>=1.5.0",
     "async-timeout>=4.0.2",
-    "discord-py>=2.5.2",
+    "discord.py>=2.3.2",
     "ffmpeg==1.4",
     "pyffmpeg==2.4.2.18.1",
     "ffmpeg-downloader==0.3.0",
@@ -21,5 +21,4 @@ dependencies = [
     "opuslib==3.0.1",
     "opusfc==1.4.0",
     "ffmpeg-python>=0.2.0",
-    "py-cord>=2.6.1",
 ]
