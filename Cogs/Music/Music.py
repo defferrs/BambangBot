@@ -176,12 +176,16 @@ class Music(commands.Cog):
         )
         await ctx.respond(embed=loading_embed)
 
-        # Search for the song
+        # Search for the song with enhanced options
         ydl_opts = {
-            'format': 'bestaudio/best',
+            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
             'quiet': True,
             'no_warnings': True,
             'extractflat': False,
+            'nocheckcertificate': True,
+            'ignoreerrors': False,
+            'default_search': 'ytsearch',
+            'extract_flat': False
         }
 
         try:
@@ -207,14 +211,23 @@ class Music(commands.Cog):
             await ctx.edit(embed=error_embed)
             return
 
-        # Connect to voice channel
+        # Connect to voice channel with better error handling
         voice_channel = ctx.author.voice.channel
         voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 
-        if not voice:
-            voice = await voice_channel.connect()
-        elif voice.channel != voice_channel:
-            await voice.move_to(voice_channel)
+        try:
+            if not voice:
+                voice = await voice_channel.connect()
+            elif voice.channel != voice_channel:
+                await voice.move_to(voice_channel)
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Voice Connection Failed",
+                description=f"Could not connect to voice channel: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.edit(embed=error_embed)
+            return
 
         # Initialize queue if not exists
         if ctx.guild.id not in self.queue:
@@ -250,27 +263,58 @@ class Music(commands.Cog):
         title, url = self.queue[ctx.guild.id].pop(0)
         self.current_song[ctx.guild.id] = title
 
-        # Get audio source
+        # Get audio source with better error handling
         ydl_opts = {
-            'format': 'bestaudio/best',
+            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
             'quiet': True,
             'no_warnings': True,
+            'extractaudio': True,
+            'audioformat': 'mp3',
+            'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+            'restrictfilenames': True,
+            'noplaylist': True,
+            'nocheckcertificate': True,
+            'ignoreerrors': False,
+            'logtostderr': False,
+            'age_limit': None,
+            'default_search': 'auto'
         }
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                audio_url = info['url']
+                
+                # Get the best audio format
+                if 'formats' in info:
+                    audio_url = None
+                    for format in info['formats']:
+                        if format.get('acodec') != 'none':
+                            audio_url = format['url']
+                            break
+                    if not audio_url:
+                        audio_url = info['url']
+                else:
+                    audio_url = info['url']
+                
                 duration = info.get('duration', 0)
                 thumbnail = info.get('thumbnail', '')
 
-            # Create FFmpeg source
+            # Enhanced FFmpeg options for better compatibility
             ffmpeg_options = {
-                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-                'options': '-vn'
+                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
+                'options': '-vn -filter:a "volume=0.5"'
             }
             
-            source = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
+            # Create audio source with executable path
+            try:
+                source = discord.FFmpegPCMAudio(
+                    audio_url, 
+                    executable='ffmpeg',
+                    **ffmpeg_options
+                )
+            except Exception as ffmpeg_error:
+                # Fallback without custom options
+                source = discord.FFmpegPCMAudio(audio_url)
             
             # Play audio
             voice.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(ctx, voice), self.bot.loop))
@@ -293,15 +337,24 @@ class Music(commands.Cog):
             await ctx.edit(embed=embed, view=view)
 
         except Exception as e:
+            print(f"Playback error for {title}: {str(e)}")
             error_embed = discord.Embed(
                 title="❌ Playback Error",
-                description=f"Could not play: **{title}**\n\nError: {str(e)}",
+                description=f"Could not play: **{title}**\n\n**Error:** {str(e)}\n\n**Trying next song...**",
                 color=0xFF0000
             )
             await ctx.edit(embed=error_embed)
-            # Try next song
+            
+            # Wait a moment before trying next song
+            await asyncio.sleep(2)
+            
+            # Try next song in queue
             if self.queue[ctx.guild.id]:
                 await self.play_next(ctx, voice)
+            else:
+                # No more songs, disconnect
+                if voice and voice.is_connected():
+                    await voice.disconnect()
 
     @slash_command(description="📝 View the music queue with interactive navigation")
     async def queue(self, ctx):
