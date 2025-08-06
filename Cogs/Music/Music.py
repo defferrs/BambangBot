@@ -1,3 +1,4 @@
+
 import discord
 from discord.ext import commands
 from discord.commands import slash_command, Option
@@ -9,376 +10,368 @@ import os
 import subprocess
 import nacl
 
+class MusicControls(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+
+    @discord.ui.button(emoji="⏸️", style=discord.ButtonStyle.secondary, custom_id="pause")
+    async def pause_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
+        if voice and voice.is_playing():
+            voice.pause()
+            embed = discord.Embed(
+                title="⏸️ Music Paused",
+                description="Music has been paused. Click ▶️ to resume.",
+                color=0xFFA500
+            )
+            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            await interaction.response.send_message("❌ No music is currently playing!", ephemeral=True)
+
+    @discord.ui.button(emoji="▶️", style=discord.ButtonStyle.success, custom_id="resume")
+    async def resume_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
+        if voice and voice.is_paused():
+            voice.resume()
+            embed = discord.Embed(
+                title="▶️ Music Resumed",
+                description="Music playback has been resumed!",
+                color=0x00FF00
+            )
+            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            await interaction.response.send_message("❌ No music is currently paused!", ephemeral=True)
+
+    @discord.ui.button(emoji="⏭️", style=discord.ButtonStyle.primary, custom_id="skip")
+    async def skip_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
+        if voice and voice.is_playing():
+            voice.stop()
+            embed = discord.Embed(
+                title="⏭️ Song Skipped",
+                description="Skipped to the next song in queue!",
+                color=0x3498DB
+            )
+            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            await interaction.response.send_message("❌ No music is currently playing!", ephemeral=True)
+
+    @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger, custom_id="stop")
+    async def stop_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        voice = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
+        if voice:
+            music_cog = self.bot.get_cog('Music')
+            if music_cog and hasattr(music_cog, 'queue') and interaction.guild.id in music_cog.queue:
+                music_cog.queue[interaction.guild.id].clear()
+            await voice.disconnect()
+            embed = discord.Embed(
+                title="⏹️ Music Stopped",
+                description="Music stopped and queue cleared. Disconnected from voice channel.",
+                color=0xFF0000
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+        else:
+            await interaction.response.send_message("❌ Bot is not connected to a voice channel!", ephemeral=True)
+
+    @discord.ui.button(emoji="🔀", style=discord.ButtonStyle.secondary, custom_id="shuffle")
+    async def shuffle_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        music_cog = self.bot.get_cog('Music')
+        if music_cog and hasattr(music_cog, 'queue') and interaction.guild.id in music_cog.queue:
+            if len(music_cog.queue[interaction.guild.id]) > 1:
+                random.shuffle(music_cog.queue[interaction.guild.id])
+                embed = discord.Embed(
+                    title="🔀 Queue Shuffled",
+                    description=f"Shuffled {len(music_cog.queue[interaction.guild.id])} songs in the queue!",
+                    color=0x9B59B6
+                )
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                await interaction.response.send_message("❌ Need at least 2 songs in queue to shuffle!", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ No songs in queue!", ephemeral=True)
+
+class QueueView(discord.ui.View):
+    def __init__(self, bot, guild_id, page=0):
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.guild_id = guild_id
+        self.page = page
+
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.secondary)
+    async def previous_page(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if self.page > 0:
+            self.page -= 1
+            embed = self.create_queue_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            await interaction.response.send_message("❌ Already on the first page!", ephemeral=True)
+
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.secondary)
+    async def next_page(self, button: discord.ui.Button, interaction: discord.Interaction):
+        music_cog = self.bot.get_cog('Music')
+        if music_cog and hasattr(music_cog, 'queue') and self.guild_id in music_cog.queue:
+            total_pages = (len(music_cog.queue[self.guild_id]) - 1) // 10 + 1
+            if self.page < total_pages - 1:
+                self.page += 1
+                embed = self.create_queue_embed()
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                await interaction.response.send_message("❌ Already on the last page!", ephemeral=True)
+
+    def create_queue_embed(self):
+        music_cog = self.bot.get_cog('Music')
+        if not music_cog or not hasattr(music_cog, 'queue') or self.guild_id not in music_cog.queue:
+            return discord.Embed(title="📝 Queue Empty", description="No songs in queue!", color=0xFF0000)
+
+        queue = music_cog.queue[self.guild_id]
+        if not queue:
+            return discord.Embed(title="📝 Queue Empty", description="No songs in queue!", color=0xFF0000)
+
+        start = self.page * 10
+        end = start + 10
+        page_queue = queue[start:end]
+
+        embed = discord.Embed(
+            title="📝 Music Queue",
+            description=f"**Total songs:** {len(queue)} | **Page:** {self.page + 1}/{(len(queue) - 1) // 10 + 1}",
+            color=0x1DB954
+        )
+
+        for i, (title, url) in enumerate(page_queue, start=start + 1):
+            embed.add_field(
+                name=f"**{i}.** {title[:50]}{'...' if len(title) > 50 else ''}",
+                value=f"[🔗 YouTube Link]({url})",
+                inline=False
+            )
+
+        embed.set_footer(text="🎵 Use the buttons to navigate • Mobile optimized")
+        return embed
+
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.voice_clients = {}
-        self.music_queue = {}
-        self.play_next_song = asyncio.Event()
-        self.play_next_song.set()
-        self.setup_audio_system()
-        self.ytdl_format_options = {
+        self.queue = {}
+        self.current_song = {}
+
+    @slash_command(description="🎵 Play music from YouTube with interactive controls")
+    async def play(self, ctx, *, query: Option(str, "Song name or YouTube URL")):
+        """Play music with modern interactive controls"""
+        
+        # Check if user is in voice channel
+        if not ctx.author.voice:
+            embed = discord.Embed(
+                title="❌ Voice Channel Required",
+                description="You need to join a voice channel first!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed)
+            return
+
+        # Loading embed
+        loading_embed = discord.Embed(
+            title="🔍 Searching...",
+            description=f"Looking for: **{query}**",
+            color=0xFFA500
+        )
+        await ctx.respond(embed=loading_embed)
+
+        # Search for the song
+        ydl_opts = {
             'format': 'bestaudio/best',
-            'restrictfilenames': True,
-            'noplaylist': True,
-            'nocheckcertificate': True,
-            'ignoreerrors': False,
-            'logtostderr': False,
             'quiet': True,
             'no_warnings': True,
-            'default_search': 'ytsearch',
-            'source_address': '0.0.0.0'
+            'extractflat': False,
         }
-        self.ffmpeg_options = {
-            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-            'options': '-vn -ar 48000 -ac 2 -b:a 128k'
-        }
-        
-        # Alternative options to try if default doesn't work
-        self.ffmpeg_options_alt = {
-            'before_options': '-nostdin',
-            'options': '-vn -ar 48000 -ac 2 -f s16le -b:a 96k'
-        }
-        
-        # Last resort options
-        self.ffmpeg_options_minimal = {
-            'before_options': '-nostdin',
-            'options': '-vn'
-        }
-        self.ytdl = yt_dlp.YoutubeDL(self.ytdl_format_options)
 
-    def setup_audio_system(self):
-        """Setup audio system for Replit environment"""
         try:
-            # Set up PulseAudio environment variables
-            os.environ['PULSE_RUNTIME_PATH'] = '/tmp/pulse'
-            os.environ['PULSE_STATE_PATH'] = '/tmp/pulse'
-            os.environ['PULSE_MACHINE_ID'] = '1234567890'
-            
-            # Try to start pulseaudio if not running
-            try:
-                subprocess.run(['pulseaudio', '--check'], check=True, capture_output=True)
-                print("PulseAudio is already running")
-            except subprocess.CalledProcessError:
-                print("Starting PulseAudio...")
-                subprocess.Popen(['pulseaudio', '--start', '--log-target=null'], 
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                
-            print("Audio system setup completed")
-        except Exception as e:
-            print(f"Audio system setup warning: {e}")
-
-    def is_url(self, string):
-        url_pattern = re.compile(
-            r'^https?://'  # http:// or https://
-            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
-            r'localhost|'  # localhost...
-            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-            r'(?::\d+)?'  # optional port
-            r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-        return url_pattern.match(string) is not None
-
-    async def search_youtube(self, query):
-        try:
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(f"ytsearch:{query}", download=False))
-            
-            if 'entries' in data and len(data['entries']) > 0:
-                return data['entries'][0]
-            else:
-                return None
-        except Exception as e:
-            print(f"Error searching YouTube: {e}")
-            return None
-
-    async def get_audio_source(self, url_or_query):
-        try:
-            if self.is_url(url_or_query):
-                loop = asyncio.get_event_loop()
-                data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url_or_query, download=False))
-                if 'entries' in data:
-                    data = data['entries'][0]
-            else:
-                data = await self.search_youtube(url_or_query)
-                if not data:
-                    return None, None
-            
-            url = data['url']
-            title = data.get('title', 'Unknown')
-            print(f"Creating audio source for: {title}")
-            print(f"Audio URL: {url}")
-            
-            # Check if opus is loaded
-            if not discord.opus.is_loaded():
-                print("Opus not loaded, trying to load...")
-                # Try different opus library paths for Replit/Nix environment
-                opus_paths = [
-                    'libopus.so.0',
-                    'libopus.so.0.8.0',
-                    'libopus.so', 
-                    '/nix/store/*/lib/libopus.so.0',
-                    '/nix/store/*/lib/libopus.so',
-                    '/usr/lib/x86_64-linux-gnu/libopus.so.0',
-                    '/usr/lib/libopus.so.0',
-                    'opus'
-                ]
-                
-                opus_loaded = False
-                for opus_path in opus_paths:
-                    try:
-                        if '*' in opus_path:
-                            # Skip wildcard paths for now
-                            continue
-                        discord.opus.load_opus(opus_path)
-                        print(f"Successfully loaded opus from: {opus_path}")
-                        opus_loaded = True
-                        break
-                    except Exception as e:
-                        print(f"Failed to load opus from {opus_path}: {e}")
-                        continue
-                
-                if not opus_loaded:
-                    print("WARNING: Could not load opus library - trying alternative approach...")
-                    # Try to use the system opus that should be available in Replit
-                    try:
-                        import ctypes.util
-                        opus_lib = ctypes.util.find_library('opus')
-                        if opus_lib:
-                            discord.opus.load_opus(opus_lib)
-                            print(f"Successfully loaded opus using ctypes.util: {opus_lib}")
-                            opus_loaded = True
-                    except Exception as e:
-                        print(f"Failed to load opus using ctypes.util: {e}")
-                
-                if not opus_loaded:
-                    print("WARNING: Could not load opus library - voice may not work properly")
-            
-            print(f"Attempting to create audio source with URL: {url}")
-            
-            # Try primary FFmpeg options first
-            try:
-                source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, before_options=self.ffmpeg_options['before_options'], options=self.ffmpeg_options['options']))
-                print("Successfully created audio source with primary options")
-                return source, title
-            except Exception as e:
-                print(f"Primary FFmpeg options failed: {e}")
-                
-                # Try alternative FFmpeg options
-                try:
-                    print("Trying alternative FFmpeg options...")
-                    source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, before_options=self.ffmpeg_options_alt['before_options'], options=self.ffmpeg_options_alt['options']))
-                    print("Successfully created audio source with alternative options")
-                    return source, title
-                except Exception as e2:
-                    print(f"Alternative FFmpeg options also failed: {e2}")
-                    
-                    # Try minimal options as last resort
-                    try:
-                        print("Trying minimal FFmpeg options...")
-                        source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(url, before_options=self.ffmpeg_options_minimal['before_options'], options=self.ffmpeg_options_minimal['options']))
-                        print("Successfully created audio source with minimal options")
-                        return source, title
-                    except Exception as e3:
-                        print(f"All FFmpeg options failed: {e3}")
-                        raise e3
-        except Exception as e:
-            print(f"Error getting audio source: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return None, None
-
-    async def play_song(self, ctx, song_info):
-        try:
-            if isinstance(song_info, dict):
-                query = song_info['query']
-                source, title = await self.get_audio_source(query)
-            else:
-                source, title = await self.get_audio_source(song_info)
-                query = song_info
-
-            if not source:
-                await ctx.followup.send(f"Could not find or play: {query}")
-                if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
-                    await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
-                return
-
-            def after_playing(error):
-                if error:
-                    print(f'Player error: {str(error)}')
-                    print(f'Error type: {type(error)}')
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                if 'youtube.com' in query or 'youtu.be' in query:
+                    info = ydl.extract_info(query, download=False)
                 else:
-                    print('Song finished playing normally')
-                
-                print(f"Voice client state after playback: connected={ctx.voice_client.is_connected() if ctx.voice_client else False}, playing={ctx.voice_client.is_playing() if ctx.voice_client else False}")
-                
-                # Check if there are more songs in queue
-                coro = self.handle_next_song(ctx)
-                asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
+                    search_query = f"ytsearch:{query}"
+                    info = ydl.extract_info(search_query, download=False)
+                    info = info['entries'][0]
 
-            # Check if voice client is still connected
-            if not ctx.voice_client or not ctx.voice_client.is_connected():
-                await ctx.followup.send("Voice client disconnected unexpectedly")
-                return
-
-            print(f"Starting playback of: {title}")
-            print(f"Voice client volume: {getattr(source, 'volume', 'No volume control')}")
-            print(f"Voice client latency: {ctx.voice_client.latency}")
-            
-            # Set volume to maximum for better audibility
-            if hasattr(source, 'volume'):
-                source.volume = 1.0
-                print("Set source volume to 1.0")
-            
-            ctx.voice_client.play(source, after=after_playing)
-            
-            # Multiple checks to verify playback
-            for i in range(3):
-                await asyncio.sleep(1)
-                is_playing = ctx.voice_client.is_playing()
-                print(f"Voice client is playing after {i+1} second(s): {is_playing}")
-                if is_playing:
-                    break
-            
-            if not is_playing:
-                print("ERROR: Voice client reports not playing after 3 seconds - audio issue detected")
-                await ctx.followup.send(f"⚠️ Audio issue detected while playing: {title}")
-            else:
-                await ctx.followup.send(f"🎵 Now playing: {title}")
+                title = info['title']
+                url = info['webpage_url']
+                duration = info.get('duration', 0)
+                thumbnail = info.get('thumbnail', '')
 
         except Exception as e:
-            error_msg = str(e) if str(e) else "Unknown error occurred"
-            print(f"Error playing song: {error_msg}")
-            await ctx.followup.send(f"Error playing song: {error_msg}")
-            if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
-                await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
-
-    async def handle_next_song(self, ctx):
-        try:
-            # Wait a moment to ensure the current song has finished
-            await asyncio.sleep(1)
-            
-            if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
-                next_song = self.music_queue[ctx.guild.id].pop(0)
-                await self.play_song(ctx, next_song)
-            else:
-                # Only disconnect after a delay to allow for new songs to be added
-                await asyncio.sleep(5)
-                if ctx.voice_client and not ctx.voice_client.is_playing():
-                    if ctx.guild.id not in self.music_queue or not self.music_queue[ctx.guild.id]:
-                        await ctx.voice_client.disconnect()
-                        print("Disconnected due to empty queue", ephemeral=True)
-        except Exception as e:
-            print(f"Error handling next song: {e}")
-
-    @slash_command(description="Putar musik dari YouTube atau URL", contexts={discord.InteractionContextType.guild})
-    async def play(self, ctx, query: Option(str, "Nama lagu atau URL YouTube")):
-        # Ensure we're in a guild and author is a Member
-        if not hasattr(ctx.author, 'voice') or not ctx.author.voice:
-            await ctx.respond("Anda sedang tidak berada di voice channel.", ephemeral=True)
-            return
-        
-        # Handle voice connection
-        try:
-            if not ctx.voice_client:
-                await ctx.author.voice.channel.connect()
-                await ctx.respond("Bot telah bergabung ke voice channel dan memproses lagu...", ephemeral=True)
-            else:
-                await ctx.voice_client.move_to(ctx.author.voice.channel)
-                await ctx.respond("Memproses lagu...", ephemeral=True)
-        except Exception as e:
-            await ctx.respond(f"Error connecting to voice channel: {str(e)}")
+            error_embed = discord.Embed(
+                title="❌ Search Failed",
+                description=f"Could not find or play: **{query}**\n\nError: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.edit(embed=error_embed)
             return
 
-        if ctx.guild.id not in self.music_queue:
-            self.music_queue[ctx.guild.id] = []
+        # Connect to voice channel
+        voice_channel = ctx.author.voice.channel
+        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 
-        # Check if it's a URL or search query
-        if self.is_url(query):
-            display_text = f"URL: {query}"
+        if not voice:
+            voice = await voice_channel.connect()
+        elif voice.channel != voice_channel:
+            await voice.move_to(voice_channel)
+
+        # Initialize queue if not exists
+        if ctx.guild.id not in self.queue:
+            self.queue[ctx.guild.id] = []
+
+        # Add to queue
+        self.queue[ctx.guild.id].append((title, url))
+
+        # If not currently playing, start playing
+        if not voice.is_playing() and not voice.is_paused():
+            await self.play_next(ctx, voice)
         else:
-            display_text = f"Search: {query}"
+            # Song added to queue
+            embed = discord.Embed(
+                title="📝 Added to Queue",
+                description=f"**{title}**\n\nPosition in queue: **{len(self.queue[ctx.guild.id])}**",
+                color=0x00FF00
+            )
+            embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}" if duration else "Unknown", inline=True)
+            embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
+            if thumbnail:
+                embed.set_thumbnail(url=thumbnail)
+            embed.set_footer(text="🎵 Your song will play when queue reaches it")
+            
+            view = MusicControls(self.bot)
+            await ctx.edit(embed=embed, view=view)
 
-        song_info = {"query": query, "display": display_text}
-        self.music_queue[ctx.guild.id].append(song_info)
+    async def play_next(self, ctx, voice):
+        """Play the next song in queue"""
+        if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+            return
 
-        await ctx.followup.send(f"Ditambahkan ke antrian: {display_text}", ephemeral=True)
-        if not ctx.voice_client.is_playing():
-            await self.play_song(ctx, self.music_queue[ctx.guild.id].pop(0))
+        title, url = self.queue[ctx.guild.id].pop(0)
+        self.current_song[ctx.guild.id] = title
 
-    @slash_command(description="Hentikan musik dan keluar dari voice channel", contexts={discord.InteractionContextType.guild})
-    async def stop(self, ctx):
-        if ctx.voice_client:
-            await ctx.voice_client.disconnect()
-            if ctx.guild.id in self.music_queue:
-                self.music_queue[ctx.guild.id] = []
-            await ctx.respond("Bot telah meninggalkan voice channel dan antrian telah dihapus.", ephemeral=True)
-        else:
-            await ctx.respond("Bot tidak sedang berada di voice channel.")
+        # Get audio source
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+        }
 
-    @slash_command(description="Lewati lagu yang sedang diputar", contexts={discord.InteractionContextType.guild})
-    async def skip(self, ctx):
-        if ctx.voice_client and ctx.voice_client.is_playing():
-            ctx.voice_client.stop()
-            await ctx.respond("Lagu telah dilewati.")
-        else:
-            await ctx.respond("Tidak ada lagu yang sedang diputar.")
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                audio_url = info['url']
+                duration = info.get('duration', 0)
+                thumbnail = info.get('thumbnail', '')
 
-    @slash_command(description="Jeda lagu yang sedang diputar", contexts={discord.InteractionContextType.guild})
-    async def pause(self, ctx):
-        if ctx.voice_client and ctx.voice_client.is_playing():
-            ctx.voice_client.pause()
-            await ctx.respond("Lagu telah dijeda")
-        else:
-            await ctx.respond("Tidak ada lagu yang sedang diputar.")
+            # Create FFmpeg source
+            ffmpeg_options = {
+                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+                'options': '-vn'
+            }
+            
+            source = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
+            
+            # Play audio
+            voice.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(ctx, voice), self.bot.loop))
 
-    @slash_command(description="Lanjutkan lagu yang dijeda", contexts={discord.InteractionContextType.guild})
-    async def resume(self, ctx):
-        if ctx.voice_client and ctx.voice_client.is_paused():
-            ctx.voice_client.resume()
-            await ctx.respond("Lagu telah dilanjutkan")
-        else:
-            await ctx.respond("Tidak ada lagu yang sedang diputar.")
+            # Now playing embed
+            embed = discord.Embed(
+                title="🎵 Now Playing",
+                description=f"**{title}**",
+                color=0x1DB954
+            )
+            embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}" if duration else "Unknown", inline=True)
+            embed.add_field(name="Remaining", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
+            embed.add_field(name="Requested by", value=ctx.author.mention, inline=True)
+            
+            if thumbnail:
+                embed.set_thumbnail(url=thumbnail)
+            embed.set_footer(text="🎵 Use the buttons below to control playback • Mobile optimized")
 
-    @slash_command(description="Tampilkan daftar antrian musik", contexts={discord.InteractionContextType.guild})
+            view = MusicControls(self.bot)
+            await ctx.edit(embed=embed, view=view)
+
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Playback Error",
+                description=f"Could not play: **{title}**\n\nError: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.edit(embed=error_embed)
+            # Try next song
+            if self.queue[ctx.guild.id]:
+                await self.play_next(ctx, voice)
+
+    @slash_command(description="📝 View the music queue with interactive navigation")
     async def queue(self, ctx):
-        if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
-            queue_list = []
-            for i, song in enumerate(self.music_queue[ctx.guild.id]):
-                if isinstance(song, dict):
-                    display = song.get('display', song.get('query', 'Unknown'))
-                else:
-                    display = song
-                queue_list.append(f"{i+1}. {display}")
-            await ctx.respond(f"Antrian:\n" + "\n".join(queue_list))
-        else:
-            await ctx.respond("Antrian kosong.")
-
-    @slash_command(description="Acak urutan antrian musik", contexts={discord.InteractionContextType.guild})
-    async def shuffle(self, ctx):
-        if ctx.guild.id in self.music_queue and self.music_queue[ctx.guild.id]:
-            random.shuffle(self.music_queue[ctx.guild.id])
-            await ctx.respond("Antrian telah diacak.")
-        else:
-            await ctx.respond("Antrian kosong.")
-
-    @slash_command(description="Hapus lagu dari antrian berdasarkan posisi", contexts={discord.InteractionContextType.guild})
-    async def remove(self, ctx, position: Option(int, "Posisi lagu dalam antrian yang akan dihapus")):
-        if ctx.guild.id not in self.music_queue:
-            self.music_queue[ctx.guild.id] = []
-
-        if position < 1 or position > len(self.music_queue[ctx.guild.id]):
-            await ctx.respond("Posisi tidak valid.")
+        """Display music queue with pagination"""
+        if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+            embed = discord.Embed(
+                title="📝 Queue Empty",
+                description="No songs in the queue! Use `/play` to add some music.",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed)
             return
-        if self.music_queue[ctx.guild.id]:
-            removed_song = self.music_queue[ctx.guild.id].pop(position - 1)
-            if isinstance(removed_song, dict):
-                display = removed_song.get('display', removed_song.get('query', 'Unknown'))
-            else:
-                display = removed_song
-            await ctx.respond(f"Lagu {display} telah dihapus dari antrian.")
+
+        view = QueueView(self.bot, ctx.guild.id)
+        embed = view.create_queue_embed()
+        await ctx.respond(embed=embed, view=view)
+
+    @slash_command(description="⏹️ Stop music and clear queue")
+    async def stop(self, ctx):
+        """Stop music with confirmation"""
+        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
+        if voice:
+            if ctx.guild.id in self.queue:
+                self.queue[ctx.guild.id].clear()
+            await voice.disconnect()
+            
+            embed = discord.Embed(
+                title="⏹️ Music Stopped",
+                description="Music stopped, queue cleared, and disconnected from voice channel.",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed)
         else:
-            await ctx.respond("Antrian kosong.")
+            embed = discord.Embed(
+                title="❌ Not Connected",
+                description="Bot is not connected to a voice channel!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed)
+
+    @slash_command(description="🗑️ Remove a song from the queue")
+    async def remove(self, ctx, position: Option(int, "Position of song to remove (starting from 1)")):
+        """Remove song from queue by position"""
+        if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+            embed = discord.Embed(
+                title="❌ Queue Empty",
+                description="No songs in the queue to remove!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed)
+            return
+
+        if position < 1 or position > len(self.queue[ctx.guild.id]):
+            embed = discord.Embed(
+                title="❌ Invalid Position",
+                description=f"Please provide a position between 1 and {len(self.queue[ctx.guild.id])}",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed)
+            return
+
+        removed_song = self.queue[ctx.guild.id].pop(position - 1)
+        embed = discord.Embed(
+            title="🗑️ Song Removed",
+            description=f"Removed **{removed_song[0]}** from position {position}",
+            color=0x00FF00
+        )
+        embed.add_field(name="Remaining Songs", value=f"{len(self.queue[ctx.guild.id])} in queue", inline=True)
+        await ctx.respond(embed=embed)
 
 def setup(bot):
     bot.add_cog(Music(bot))
-    print("Music cog loaded")
+    print("Enhanced Music cog loaded with interactive controls")
