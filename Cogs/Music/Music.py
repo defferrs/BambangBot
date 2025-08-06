@@ -176,16 +176,23 @@ class Music(commands.Cog):
         )
         await ctx.respond(embed=loading_embed)
 
-        # Search for the song with enhanced options
+        # Search for the song with enhanced options and cookie handling
         ydl_opts = {
             'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
             'quiet': True,
             'no_warnings': True,
             'extractflat': False,
             'nocheckcertificate': True,
-            'ignoreerrors': False,
+            'ignoreerrors': True,
             'default_search': 'ytsearch',
-            'extract_flat': False
+            'extract_flat': False,
+            'age_limit': 18,
+            'extractor_args': {
+                'youtube': {
+                    'skip': ['dash', 'hls']
+                }
+            },
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
 
         try:
@@ -263,58 +270,89 @@ class Music(commands.Cog):
         title, url = self.queue[ctx.guild.id].pop(0)
         self.current_song[ctx.guild.id] = title
 
-        # Get audio source with better error handling
-        ydl_opts = {
+        # Get audio source with multiple fallback methods
+        ydl_opts_play = {
             'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
             'quiet': True,
             'no_warnings': True,
-            'extractaudio': True,
-            'audioformat': 'mp3',
+            'extractaudio': False,
             'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
             'restrictfilenames': True,
             'noplaylist': True,
             'nocheckcertificate': True,
-            'ignoreerrors': False,
+            'ignoreerrors': True,
             'logtostderr': False,
-            'age_limit': None,
-            'default_search': 'auto'
+            'age_limit': 18,
+            'default_search': 'auto',
+            'extractor_args': {
+                'youtube': {
+                    'skip': ['dash', 'hls']
+                }
+            },
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                
-                # Get the best audio format
-                if 'formats' in info:
-                    audio_url = None
-                    for format in info['formats']:
-                        if format.get('acodec') != 'none':
-                            audio_url = format['url']
-                            break
-                    if not audio_url:
-                        audio_url = info['url']
-                else:
-                    audio_url = info['url']
-                
-                duration = info.get('duration', 0)
-                thumbnail = info.get('thumbnail', '')
-
-            # Enhanced FFmpeg options for better compatibility
-            ffmpeg_options = {
-                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-                'options': '-vn -filter:a "volume=0.5"'
-            }
-            
-            # Create audio source with executable path
+        audio_url = None
+        duration = 0
+        thumbnail = ''
+        
+        # Try multiple extraction methods
+        extraction_methods = [ydl_opts_play]
+        
+        for i, opts in enumerate(extraction_methods):
             try:
-                source = discord.FFmpegPCMAudio(
-                    audio_url, 
-                    executable='ffmpeg',
-                    **ffmpeg_options
-                )
-            except Exception as ffmpeg_error:
-                # Fallback without custom options
-                source = discord.FFmpegPCMAudio(audio_url)
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    
+                    # Get the best audio format
+                    if 'formats' in info:
+                        for format in info['formats']:
+                            if format.get('acodec') != 'none' and format.get('url'):
+                                audio_url = format['url']
+                                break
+                    
+                    if not audio_url and 'url' in info:
+                        audio_url = info['url']
+                    
+                    if audio_url:
+                        duration = info.get('duration', 0)
+                        thumbnail = info.get('thumbnail', '')
+                        break
+                        
+            except Exception as extraction_error:
+                print(f"Extraction method {i+1} failed: {str(extraction_error)}")
+                continue
+        
+        if not audio_url:
+            raise Exception("Could not extract audio URL from any method")
+
+            # Enhanced FFmpeg options with multiple fallbacks
+            ffmpeg_options_list = [
+                {
+                    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin -user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"',
+                    'options': '-vn -filter:a "volume=0.5"'
+                },
+                {
+                    'before_options': '-nostdin',
+                    'options': '-vn'
+                },
+                {}  # No options fallback
+            ]
+            
+            source = None
+            for i, ffmpeg_options in enumerate(ffmpeg_options_list):
+                try:
+                    if ffmpeg_options:
+                        source = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
+                    else:
+                        source = discord.FFmpegPCMAudio(audio_url)
+                    break
+                except Exception as ffmpeg_error:
+                    print(f"FFmpeg method {i+1} failed: {str(ffmpeg_error)}")
+                    continue
+            
+            if not source:
+                raise Exception("Could not create audio source with any FFmpeg options")
             
             # Play audio
             voice.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(ctx, voice), self.bot.loop))
@@ -337,23 +375,48 @@ class Music(commands.Cog):
             await ctx.edit(embed=embed, view=view)
 
         except Exception as e:
-            print(f"Playback error for {title}: {str(e)}")
+            error_msg = str(e)
+            print(f"Playback error for {title}: {error_msg}")
+            
+            # Provide user-friendly error messages
+            if "Sign in to confirm you're not a bot" in error_msg:
+                user_error = "YouTube requires verification. Please try a different song or use a direct YouTube link."
+            elif "Video unavailable" in error_msg:
+                user_error = "This video is not available. It may be region-locked or private."
+            elif "not a bot" in error_msg.lower():
+                user_error = "YouTube is blocking requests. Please try again in a few minutes."
+            else:
+                user_error = f"Audio extraction failed: {error_msg[:100]}..."
+            
             error_embed = discord.Embed(
                 title="❌ Playback Error",
-                description=f"Could not play: **{title}**\n\n**Error:** {str(e)}\n\n**Trying next song...**",
+                description=f"Could not play: **{title}**\n\n**Issue:** {user_error}",
                 color=0xFF0000
             )
-            await ctx.edit(embed=error_embed)
             
-            # Wait a moment before trying next song
-            await asyncio.sleep(2)
-            
-            # Try next song in queue
+            # Check if there are more songs in queue
             if self.queue[ctx.guild.id]:
+                error_embed.add_field(
+                    name="🔄 Auto-Skip", 
+                    value=f"Trying next song... ({len(self.queue[ctx.guild.id])} remaining)", 
+                    inline=False
+                )
+                await ctx.edit(embed=error_embed)
+                
+                # Wait a moment before trying next song
+                await asyncio.sleep(3)
                 await self.play_next(ctx, voice)
             else:
-                # No more songs, disconnect
+                error_embed.add_field(
+                    name="💡 Suggestion", 
+                    value="Try searching for a different song or check if the video is publicly available.", 
+                    inline=False
+                )
+                await ctx.edit(embed=error_embed)
+                
+                # Disconnect after error if no more songs
                 if voice and voice.is_connected():
+                    await asyncio.sleep(5)
                     await voice.disconnect()
 
     @slash_command(description="📝 View the music queue with interactive navigation")
