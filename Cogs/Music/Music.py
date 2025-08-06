@@ -8,7 +8,21 @@ import yt_dlp
 import re
 import os
 import subprocess
-import nacl
+
+# Voice dependencies
+try:
+    import nacl
+    import nacl.secret
+    from nacl.encoding import Base64Encoder
+    VOICE_ENABLED = True
+except ImportError:
+    VOICE_ENABLED = False
+    print("Warning: PyNaCl not installed, voice features may not work")
+
+try:
+    import opuslib
+except ImportError:
+    print("Warning: opuslib not installed, opus encoding may not work optimally")
 
 # FFmpeg options for better audio quality
 FFMPEG_OPTIONS = {
@@ -257,15 +271,48 @@ class Music(commands.Cog):
             await ctx.edit(embed=error_embed)
             return
 
+        # Check voice dependencies
+        if not VOICE_ENABLED:
+            error_embed = discord.Embed(
+                title="❌ Voice Dependencies Missing",
+                description="PyNaCl is required for voice features. Please install it.",
+                color=0xFF0000
+            )
+            await ctx.edit(embed=error_embed)
+            return
+
         # Connect to voice channel with better error handling
         voice_channel = ctx.author.voice.channel
         voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 
         try:
             if not voice:
-                voice = await voice_channel.connect()
+                voice = await voice_channel.connect(reconnect=True, timeout=60.0)
             elif voice.channel != voice_channel:
                 await voice.move_to(voice_channel)
+        except discord.ClientException as e:
+            if "already connected to a voice channel" in str(e).lower():
+                # Try to disconnect and reconnect
+                try:
+                    await voice.disconnect(force=True)
+                    await asyncio.sleep(1)
+                    voice = await voice_channel.connect(reconnect=True, timeout=60.0)
+                except Exception as reconnect_error:
+                    error_embed = discord.Embed(
+                        title="❌ Voice Connection Failed",
+                        description=f"Could not connect to voice channel: {str(reconnect_error)}",
+                        color=0xFF0000
+                    )
+                    await ctx.edit(embed=error_embed)
+                    return
+            else:
+                error_embed = discord.Embed(
+                    title="❌ Voice Connection Failed",
+                    description=f"Could not connect to voice channel: {str(e)}",
+                    color=0xFF0000
+                )
+                await ctx.edit(embed=error_embed)
+                return
         except Exception as e:
             error_embed = discord.Embed(
                 title="❌ Voice Connection Failed",

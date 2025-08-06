@@ -7,7 +7,16 @@ if not TOKEN:
     print("ERROR: No TOKEN environment variable found!")
     exit(1)
 intents = discord.Intents.all() #need to enable
-bot = commands.Bot(command_prefix='~', intents=intents)
+# Ensure voice intents are enabled
+intents.voice_states = True
+intents.guilds = True
+
+bot = commands.Bot(
+    command_prefix='~', 
+    intents=intents,
+    help_command=None,
+    case_insensitive=True
+)
 
 @bot.event
 async def on_ready():
@@ -16,6 +25,13 @@ async def on_ready():
     print(f'🌟 All-in-One bot features loaded')
     print(f'🏠 Connected to {len(bot.guilds)} servers')
     print(f'👥 Serving {len(bot.users)} users')
+    
+    # Check voice capabilities
+    try:
+        import nacl
+        print("✅ Voice support enabled (PyNaCl installed)")
+    except ImportError:
+        print("⚠️ Voice support disabled (PyNaCl not installed)")
     
     try:
         synced = await bot.sync_commands()
