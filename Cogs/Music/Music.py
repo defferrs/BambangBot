@@ -471,6 +471,11 @@ class Music(commands.Cog):
                 else:
                     search_query = f"ytsearch:{query}"
                     info = ydl.extract_info(search_query, download=False)
+                    
+                    # Check if search returned any results
+                    if not info or 'entries' not in info or not info['entries']:
+                        raise Exception("No search results found")
+                    
                     info = info['entries'][0]
 
                 title = info['title']
@@ -1021,6 +1026,11 @@ class Music(commands.Cog):
                 else:
                     search_query = f"ytsearch:{seed_query}"
                     info = ydl.extract_info(search_query, download=False)
+                    
+                    # Check if search returned any results
+                    if not info or 'entries' not in info or not info['entries']:
+                        raise Exception("No search results found")
+                    
                     info = info['entries'][0]
 
                 seed_title = info['title']
