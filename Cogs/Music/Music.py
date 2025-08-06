@@ -26,15 +26,29 @@ except ImportError:
     OPUS_ENABLED = False
     print("Warning: opuslib not installed, trying to load from discord")
 
-# Try to load opus from discord.py
+# Try to load opus from discord.py with better error handling
+def load_opus_library():
+    """Load opus library with multiple fallback options"""
+    if discord.opus.is_loaded():
+        return True
+    
+    opus_names = ['libopus.so.0', 'libopus.so', 'opus', 'libopus', 'libopus-0.dll', 'opus.dll']
+    
+    for opus_name in opus_names:
+        try:
+            discord.opus.load_opus(opus_name)
+            print(f"✅ Opus library loaded ({opus_name})")
+            return True
+        except Exception:
+            continue
+    
+    return False
+
 if not OPUS_ENABLED:
     try:
-        if not discord.opus.is_loaded():
-            # Try to load opus library
-            discord.opus.load_opus('opus')
-        OPUS_ENABLED = True
+        OPUS_ENABLED = load_opus_library()
     except Exception as e:
-        print(f"Failed to load Opus: {e}")
+        print(f"Warning: Could not load Opus library: {e}")
         OPUS_ENABLED = False
 
 # FFmpeg options for better audio quality
@@ -294,27 +308,17 @@ class Music(commands.Cog):
             await ctx.edit(embed=error_embed)
             return
 
-        # Check opus library
+        # Check opus library with better handling
         if not OPUS_ENABLED and not discord.opus.is_loaded():
-            error_embed = discord.Embed(
-                title="❌ Audio Codec Missing",
-                description="Opus library is required for audio playback. Attempting to load...",
-                color=0xFF0000
-            )
-            await ctx.edit(embed=error_embed)
-            try:
-                discord.opus.load_opus('libopus')
-            except:
-                try:
-                    discord.opus.load_opus('opus')
-                except:
-                    error_embed = discord.Embed(
-                        title="❌ Audio Codec Failed",
-                        description="Could not load Opus library. Music features unavailable.",
-                        color=0xFF0000
-                    )
-                    await ctx.edit(embed=error_embed)
-                    return
+            # Try to load opus library dynamically
+            if not load_opus_library():
+                error_embed = discord.Embed(
+                    title="❌ Audio Codec Failed",
+                    description="Could not load Opus library. Music features unavailable.",
+                    color=0xFF0000
+                )
+                await ctx.edit(embed=error_embed)
+                return
 
         # Connect to voice channel with better error handling
         voice_channel = ctx.author.voice.channel
@@ -815,5 +819,11 @@ class Music(commands.Cog):
         await ctx.edit(embed=embed, view=view)
 
 def setup(bot):
-    bot.add_cog(Music(bot))
-    print("Enhanced Music cog loaded with interactive controls")
+    try:
+        bot.add_cog(Music(bot))
+        print("Enhanced Music cog loaded with interactive controls")
+    except Exception as e:
+        print(f"Warning: Music cog loaded with limited functionality: {e}")
+        # Load the cog anyway, errors will be handled in individual commands
+        bot.add_cog(Music(bot))
+        print("Music cog loaded with limited voice capabilities")
