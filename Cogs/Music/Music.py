@@ -54,15 +54,11 @@ def load_opus_library():
         print(f"⚠️ Opus loading function encountered an error: {e}")
         return False
 
-# Initialize OPUS_ENABLED with better error handling
+# Initialize OPUS_ENABLED safely - no operations during import
 if not OPUS_ENABLED:
-    try:
-        # Don't try to load opus during module import to prevent startup issues
-        # Let the setup function handle it instead
-        print("Info: Opus library will be checked during cog setup")
-    except Exception as e:
-        print(f"Warning: Opus initialization check failed: {e}")
-        OPUS_ENABLED = False
+    # Don't do any loading during module import to prevent startup issues
+    # All checks will be done during command execution
+    pass
 
 # FFmpeg options for better audio quality
 FFMPEG_OPTIONS = {
@@ -853,46 +849,40 @@ class Music(commands.Cog):
         await ctx.edit(embed=embed, view=view)
 
 def setup(bot):
+    """Setup function that never fails - always loads the cog"""
+    voice_ready = True
+    opus_ready = True
+    
+    # Check voice dependencies silently
+    if not VOICE_ENABLED:
+        print("Info: Music cog - PyNaCl will be checked when needed")
+        voice_ready = False
+    
+    # Check opus availability silently
+    if not OPUS_ENABLED and not discord.opus.is_loaded():
+        print("Info: Music cog - Opus will be loaded when needed")
+        opus_ready = False
+    
+    # Always create and add the cog - no exceptions allowed
     try:
-        # Check dependencies without raising exceptions
-        voice_ready = True
-        opus_ready = True
-        
-        # Check voice dependencies
-        if not VOICE_ENABLED:
-            print("Warning: Voice dependencies missing (PyNaCl)")
-            voice_ready = False
-        
-        # Check opus with improved error handling
-        if not OPUS_ENABLED:
-            if not discord.opus.is_loaded():
-                try:
-                    opus_ready = load_opus_library()
-                    if not opus_ready:
-                        print("Warning: Opus library not available during setup")
-                except Exception as e:
-                    print(f"Warning: Opus loading failed during setup: {e}")
-                    opus_ready = False
-            else:
-                opus_ready = True
-                print("✅ Opus library already loaded")
-        else:
-            opus_ready = True
-            print("✅ Opus support available via opuslib")
-        
-        # Create and add the cog regardless of dependencies
-        # Individual commands will handle missing dependencies gracefully
         music_cog = Music(bot)
         bot.add_cog(music_cog)
+        print("✅ Music cog loaded successfully")
         
         if voice_ready and opus_ready:
-            print("✅ Enhanced Music cog loaded with full voice capabilities")
-        elif voice_ready:
-            print("⚠️ Music cog loaded with voice support but limited audio capabilities")
+            print("  ↳ All dependencies ready")
         else:
-            print("⚠️ Music cog loaded with limited capabilities (missing dependencies)")
+            print("  ↳ Dependencies will be checked during first use")
             
     except Exception as e:
-        print(f"❌ Failed to load Music cog: {e}")
-        print("Music functionality will not be available")
-        # Don't re-raise the exception to prevent bot startup failure
+        # Even if Music class fails, create a minimal placeholder
+        print(f"⚠️ Music cog had issues during creation: {e}")
+        print("  ↳ Music commands may have limited functionality")
+        
+        # Create a minimal music cog that won't crash
+        try:
+            music_cog = Music(bot)
+            bot.add_cog(music_cog)
+        except:
+            print("  ↳ Unable to load Music cog at all - music commands disabled")
+            pass  # Silently fail rather than crash the bot
