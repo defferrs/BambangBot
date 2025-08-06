@@ -249,8 +249,8 @@ class Music(commands.Cog):
             await ctx.respond(embed=embed)
             return
 
-        # Check if user is in voice channel
-        if not ctx.author.voice:
+        # Check if user is in voice channel with proper error handling
+        if not ctx.author.voice or not ctx.author.voice.channel:
             embed = discord.Embed(
                 title="❌ Voice Channel Required",
                 description="You need to join a voice channel first!",
@@ -693,8 +693,8 @@ class Music(commands.Cog):
             await ctx.respond(embed=embed)
             return
 
-        # Check if user is in voice channel
-        if not ctx.author.voice:
+        # Check if user is in voice channel with proper error handling
+        if not ctx.author.voice or not ctx.author.voice.channel:
             embed = discord.Embed(
                 title="❌ Voice Channel Required",
                 description="You need to join a voice channel first!",
