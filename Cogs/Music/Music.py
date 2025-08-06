@@ -29,24 +29,31 @@ except ImportError:
 # Try to load opus from discord.py with better error handling
 def load_opus_library():
     """Load opus library with multiple fallback options"""
-    if discord.opus.is_loaded():
-        return True
-    
-    opus_names = ['libopus.so.0', 'libopus.so', 'opus', 'libopus', 'libopus-0.dll', 'opus.dll']
-    
-    for opus_name in opus_names:
-        try:
-            discord.opus.load_opus(opus_name)
-            print(f"✅ Opus library loaded ({opus_name})")
+    try:
+        if discord.opus.is_loaded():
             return True
-        except Exception:
-            continue
-    
-    return False
+        
+        opus_names = ['libopus.so.0', 'libopus.so', 'opus', 'libopus', 'libopus-0.dll', 'opus.dll']
+        
+        for opus_name in opus_names:
+            try:
+                discord.opus.load_opus(opus_name)
+                print(f"✅ Opus library loaded ({opus_name})")
+                return True
+            except Exception:
+                continue
+        
+        return False
+    except Exception as e:
+        print(f"Warning: Opus loading function failed: {e}")
+        return False
 
+# Initialize OPUS_ENABLED with better error handling
 if not OPUS_ENABLED:
     try:
         OPUS_ENABLED = load_opus_library()
+        if not OPUS_ENABLED:
+            print("Warning: Could not load Opus library during initialization")
     except Exception as e:
         print(f"Warning: Could not load Opus library: {e}")
         OPUS_ENABLED = False
@@ -820,10 +827,20 @@ class Music(commands.Cog):
 
 def setup(bot):
     try:
+        # Try to ensure Opus is loaded before adding the cog
+        if not discord.opus.is_loaded():
+            opus_loaded = load_opus_library()
+            if not opus_loaded:
+                print("Warning: Opus library not available, music features may be limited")
+        
         bot.add_cog(Music(bot))
         print("Enhanced Music cog loaded with interactive controls")
     except Exception as e:
-        print(f"Warning: Music cog loaded with limited functionality: {e}")
-        # Load the cog anyway, errors will be handled in individual commands
-        bot.add_cog(Music(bot))
-        print("Music cog loaded with limited voice capabilities")
+        print(f"Failed to load Music.Music: {e}")
+        try:
+            # Try to load the cog anyway with limited functionality
+            bot.add_cog(Music(bot))
+            print("Music cog loaded with limited voice capabilities")
+        except Exception as fallback_error:
+            print(f"Critical: Could not load Music cog at all: {fallback_error}")
+            raise fallback_error
