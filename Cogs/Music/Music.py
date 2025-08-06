@@ -10,6 +10,27 @@ import os
 import subprocess
 import nacl
 
+# FFmpeg options for better audio quality
+FFMPEG_OPTIONS = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn'
+}
+
+# yt-dlp options
+YDL_OPTIONS = {
+    'format': 'bestaudio/best',
+    'noplaylist': True,
+    'extractaudio': True,
+    'audioformat': 'mp3',
+    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'restrictfilenames': True,
+    'no_warnings': True,
+    'logtostderr': False,
+    'ignoreerrors': False,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0'
+}
+
 class MusicControls(discord.ui.View):
     def __init__(self, bot):
         super().__init__(timeout=None)
@@ -153,6 +174,23 @@ class Music(commands.Cog):
         self.bot = bot
         self.queue = {}
         self.current_song = {}
+    
+    async def search_youtube(self, query):
+        """Search for music on YouTube"""
+        try:
+            with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+                info = ydl.extract_info(f"ytsearch:{query}", download=False)
+                if 'entries' in info and len(info['entries']) > 0:
+                    entry = info['entries'][0]
+                    return {
+                        'title': entry.get('title', 'Unknown'),
+                        'url': entry.get('webpage_url', ''),
+                        'duration': entry.get('duration', 0),
+                        'uploader': entry.get('uploader', 'Unknown')
+                    }
+        except Exception as e:
+            print(f"Search error: {e}")
+            return None
 
     @slash_command(description="🎵 Play music from YouTube with interactive controls")
     async def play(self, ctx, *, query: Option(str, "Song name or YouTube URL")):
@@ -172,6 +210,8 @@ class Music(commands.Cog):
         loading_embed = discord.Embed(
             title="🔍 Searching...",
             description=f"Looking for: **{query}**",
+            color=0x00FF00
+        )ry}**",
             color=0xFFA500
         )
         await ctx.respond(embed=loading_embed)
