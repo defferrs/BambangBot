@@ -5,6 +5,7 @@ from discord.commands import slash_command, Option
 import datetime
 import json
 import os
+import asyncio
 
 class ConfirmationView(discord.ui.View):
     def __init__(self, action_type, target, moderator):
