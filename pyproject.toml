@@ -18,8 +18,7 @@ dependencies = [
     "python-ffmpeg-video-streaming==0.1.16",
     "better-ffmpeg-progress==2.5.8",
     "ffmpeg-normalize==1.30.0",
-    "opuslib==3.0.1",
-    "opusfc==1.4.0",
+    
     "ffmpeg-python>=0.2.0",
     "py-cord>=2.6.1",
 ]
