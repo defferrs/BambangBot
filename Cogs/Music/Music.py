@@ -245,6 +245,27 @@ class Music(commands.Cog):
     async def play(self, ctx, *, query: Option(str, "Song name or YouTube URL")):
         """Play music with modern interactive controls"""
         
+        # Check voice dependencies first
+        if not VOICE_ENABLED:
+            embed = discord.Embed(
+                title="❌ Voice Dependencies Missing",
+                description="PyNaCl is required for voice features. Music functionality is currently unavailable.",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed)
+            return
+        
+        # Check opus library
+        if not OPUS_ENABLED and not discord.opus.is_loaded():
+            if not load_opus_library():
+                embed = discord.Embed(
+                    title="❌ Audio Codec Missing",
+                    description="Opus library is required for audio playback. Music functionality is currently unavailable.",
+                    color=0xFF0000
+                )
+                await ctx.respond(embed=embed)
+                return
+        
         # Check if user is in voice channel
         if not ctx.author.voice:
             embed = discord.Embed(
@@ -827,20 +848,35 @@ class Music(commands.Cog):
 
 def setup(bot):
     try:
-        # Try to ensure Opus is loaded before adding the cog
-        if not discord.opus.is_loaded():
+        # Check dependencies without raising exceptions
+        voice_ready = True
+        opus_ready = True
+        
+        # Check voice dependencies
+        if not VOICE_ENABLED:
+            print("Warning: Voice dependencies missing (PyNaCl)")
+            voice_ready = False
+        
+        # Check opus without raising exceptions
+        if not OPUS_ENABLED and not discord.opus.is_loaded():
             try:
-                opus_loaded = load_opus_library()
-                if not opus_loaded:
-                    print("Warning: Opus library not available, music features may be limited")
-            except Exception as opus_error:
-                print(f"Warning: Opus loading failed: {opus_error}")
+                opus_ready = load_opus_library()
+                if not opus_ready:
+                    print("Warning: Opus library not available")
+            except Exception:
+                print("Warning: Opus loading failed")
+                opus_ready = False
         
-        # Always try to add the cog - errors will be handled in individual commands
-        bot.add_cog(Music(bot))
-        print("Enhanced Music cog loaded with interactive controls")
+        # Create and add the cog regardless of dependencies
+        # Individual commands will handle missing dependencies gracefully
+        music_cog = Music(bot)
+        bot.add_cog(music_cog)
         
+        if voice_ready and opus_ready:
+            print("✅ Enhanced Music cog loaded with full voice capabilities")
+        else:
+            print("⚠️ Music cog loaded with limited capabilities (missing dependencies)")
+            
     except Exception as e:
-        # If cog loading fails completely, print error but don't crash
-        print(f"Failed to load Music.Music: Extension 'Cogs.Music.Music' raised an error: {e}")
-        print("Music cog will not be available")
+        print(f"❌ Critical: Failed to load Music cog: {e}")
+        # Don't re-raise the exception to prevent bot startup failure
