@@ -1,3 +1,2 @@
-git+https://github.com/Pycord-Development/pycord
-googlesearch-python
-beautifulsoup4
+
+# All dependencies are now in pyproject.toml
