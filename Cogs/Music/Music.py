@@ -134,9 +134,9 @@ class MusicControls(discord.ui.View):
                 music_cog = self.bot.get_cog('Music')
                 is_auto_play = (music_cog and hasattr(music_cog, 'auto_play_mode') and 
                                interaction.guild.id in music_cog.auto_play_mode)
-                
+
                 voice.stop()
-                
+
                 # If auto-play is active and queue is low, get more recommendations
                 if is_auto_play and music_cog and interaction.guild.id in music_cog.queue:
                     if len(music_cog.queue[interaction.guild.id]) <= 2:  # When queue is getting low
@@ -151,7 +151,7 @@ class MusicControls(discord.ui.View):
                                 print(f"Auto-play: Added {len(recommendations)} more recommendations")
                         except Exception as rec_error:
                             print(f"Auto-play recommendation error: {rec_error}")
-                
+
                 embed = discord.Embed(
                     title="⏭️ Song Skipped",
                     description="Skipped to the next song in queue!" + 
@@ -240,7 +240,7 @@ class MusicControls(discord.ui.View):
                 music_cog.auto_play_mode = {}
 
             guild_id = interaction.guild.id
-            
+
             # Toggle auto-play mode
             if guild_id in music_cog.auto_play_mode:
                 # Disable auto-play
@@ -254,7 +254,7 @@ class MusicControls(discord.ui.View):
             else:
                 # Enable auto-play - need a current song to base recommendations on
                 current_song_url = None
-                
+
                 # Try to get the last played song or current song
                 if hasattr(music_cog, 'last_played') and guild_id in music_cog.last_played:
                     current_song_url = music_cog.last_played[guild_id]
@@ -265,7 +265,7 @@ class MusicControls(discord.ui.View):
                 if current_song_url:
                     # Enable auto-play
                     music_cog.auto_play_mode[guild_id] = current_song_url
-                    
+
                     # Get recommendations and add to queue
                     embed = discord.Embed(
                         title="🎲 Auto-Play Enabled!",
@@ -273,31 +273,31 @@ class MusicControls(discord.ui.View):
                         color=0x9B59B6
                     )
                     await interaction.response.edit_message(embed=embed, view=self)
-                    
+
                     # Add recommendations to queue
                     try:
                         recommendations = await music_cog.get_youtube_recommendations(current_song_url)
-                        
+
                         # Initialize queue if needed
                         if guild_id not in music_cog.queue:
                             music_cog.queue[guild_id] = []
-                            
+
                         for rec in recommendations:
                             music_cog.queue[guild_id].append((rec['title'], rec['webpage_url']))
-                        
+
                         # Update embed with success message
                         success_embed = discord.Embed(
                             title="🎲 Auto-Play Enabled!",
                             description=f"Added **{len(recommendations)}** recommended songs to queue.\n\nAuto-play will continue finding similar music!",
                             color=0x9B59B6
                         )
-                        
+
                         if recommendations:
                             rec_list = "\n".join([f"• {rec['title'][:30]}{'...' if len(rec['title']) > 30 else ''}" for rec in recommendations[:3]])
                             success_embed.add_field(name="🎵 Added to Queue", value=rec_list, inline=False)
-                        
+
                         await interaction.edit_original_response(embed=success_embed, view=self)
-                        
+
                     except Exception as rec_error:
                         print(f"Auto-play recommendation error: {rec_error}")
                         error_embed = discord.Embed(
@@ -308,7 +308,7 @@ class MusicControls(discord.ui.View):
                         await interaction.edit_original_response(embed=error_embed, view=self)
                 else:
                     await interaction.response.send_message("❌ No current song to base recommendations on! Play a song first.", ephemeral=True)
-                    
+
         except discord.NotFound:
             # Interaction already responded to or expired
             pass
@@ -326,7 +326,7 @@ class SearchResultsView(discord.ui.View):
         self.ctx = ctx
         self.search_results = search_results
         self.voice_channel = voice_channel
-        
+
         # Add buttons for each search result
         for i, result in enumerate(search_results[:5]):
             button = discord.ui.Button(
@@ -337,21 +337,21 @@ class SearchResultsView(discord.ui.View):
             )
             button.callback = self.create_song_callback(i)
             self.add_item(button)
-    
+
     def create_song_callback(self, index):
         async def song_callback(interaction):
             if interaction.user != self.ctx.author:
                 await interaction.response.send_message("❌ Only the person who requested the search can select a song!", ephemeral=True)
                 return
-            
+
             selected_song = self.search_results[index]
             await interaction.response.edit_message(content="🎵 Processing your selection...", embed=None, view=None)
-            
+
             # Now play the selected song
             music_cog = self.bot.get_cog('Music')
             if music_cog:
                 await music_cog.play_selected_song(self.ctx, selected_song, self.voice_channel)
-        
+
         return song_callback
 
 class QueueView(discord.ui.View):
@@ -434,7 +434,7 @@ class Music(commands.Cog):
         except Exception as e:
             print(f"Search error: {e}")
             return None
-    
+
     async def search_youtube_multiple(self, query, max_results=5):
         """Search for multiple songs on YouTube"""
         try:
@@ -448,14 +448,14 @@ class Music(commands.Cog):
                 'extract_flat': False,
                 'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
             }
-            
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 search_query = f"ytsearch{max_results}:{query}"
                 info = ydl.extract_info(search_query, download=False)
-                
+
                 if not info or 'entries' not in info or not info['entries']:
                     return []
-                
+
                 results = []
                 for entry in info['entries'][:max_results]:
                     if entry:
@@ -466,18 +466,18 @@ class Music(commands.Cog):
                             'uploader': entry.get('uploader', 'Unknown'),
                             'thumbnail': entry.get('thumbnail', '')
                         })
-                
+
                 return results
         except Exception as e:
             print(f"Multiple search error: {e}")
             return []
-    
+
     async def play_selected_song(self, ctx, selected_song, voice_channel):
         """Play the selected song from search results"""
         try:
             # Connect to voice channel
             voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
-            
+
             try:
                 if not voice:
                     voice = await voice_channel.connect(reconnect=True, timeout=60.0)
@@ -498,7 +498,7 @@ class Music(commands.Cog):
 
             # Add to queue
             self.queue[ctx.guild.id].append((selected_song['title'], selected_song['url']))
-            
+
             # Track the song for potential auto-play recommendations
             if not hasattr(self, 'last_played'):
                 self.last_played = {}
@@ -517,14 +517,14 @@ class Music(commands.Cog):
                 embed.add_field(name="Duration", value=f"{selected_song['duration']//60}:{selected_song['duration']%60:02d}" if selected_song['duration'] else "Unknown", inline=True)
                 embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
                 embed.add_field(name="Uploader", value=selected_song['uploader'], inline=True)
-                
+
                 if selected_song['thumbnail']:
                     embed.set_thumbnail(url=selected_song['thumbnail'])
                 embed.set_footer(text="🎵 Your song will play when queue reaches it • Use 🎲 button for auto-play")
 
                 view = MusicControls(self.bot)
                 await ctx.edit(embed=embed, view=view)
-                
+
         except Exception as e:
             error_embed = discord.Embed(
                 title="❌ Playback Failed",
@@ -581,7 +581,7 @@ class Music(commands.Cog):
                 'ignoreerrors': True,
                 'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
             }
-            
+
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(query, download=False)
@@ -605,7 +605,7 @@ class Music(commands.Cog):
         else:
             # Search query - show multiple results
             search_results = await self.search_youtube_multiple(query, 5)
-            
+
             if not search_results:
                 error_embed = discord.Embed(
                     title="❌ Search Failed",
@@ -614,14 +614,14 @@ class Music(commands.Cog):
                 )
                 await ctx.edit(embed=error_embed)
                 return
-            
+
             # Create search results embed
             embed = discord.Embed(
                 title="🔍 Search Results",
                 description=f"Found **{len(search_results)}** results for: **{query}**\n\nClick a button below to select a song:",
                 color=0x1DB954
             )
-            
+
             for i, result in enumerate(search_results):
                 duration_str = f"{result['duration']//60}:{result['duration']%60:02d}" if result['duration'] else "Unknown"
                 embed.add_field(
@@ -629,12 +629,12 @@ class Music(commands.Cog):
                     value=f"**Duration:** {duration_str} | **Uploader:** {result['uploader'][:20]}{'...' if len(result['uploader']) > 20 else ''}",
                     inline=False
                 )
-            
+
             embed.set_footer(text="🎵 Select a song using the buttons below • 60 seconds to choose")
-            
+
             if search_results[0]['thumbnail']:
                 embed.set_thumbnail(url=search_results[0]['thumbnail'])
-            
+
             # Create view with selection buttons
             view = SearchResultsView(self.bot, ctx, search_results, voice_channel)
             await ctx.edit(embed=embed, view=view)
@@ -646,7 +646,7 @@ class Music(commands.Cog):
         if not voice or not voice.is_connected():
             print("Voice client disconnected, cannot continue playing")
             return
-            
+
         if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
             # Auto-play mode: If queue is empty, try to get more recommendations
             if hasattr(self, 'auto_play_mode') and ctx.guild.id in getattr(self, 'auto_play_mode', {}):
@@ -923,115 +923,83 @@ class Music(commands.Cog):
         await ctx.respond(embed=embed)
 
     async def get_youtube_recommendations(self, video_url):
-        """Get YouTube recommendations based on a video URL with improved error handling"""
+        """Get YouTube recommendations based on a video URL - simplified for better reliability"""
         try:
-            # Enhanced options to avoid bot detection
+            # Simple options for faster extraction
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'extractflat': False,
-                'nocheckcertificate': True,
                 'ignoreerrors': True,
-                'cookiefile': None,
-                'extractor_args': {
-                    'youtube': {
-                        'skip': ['dash', 'hls'],
-                        'player_client': ['android', 'web']
-                    }
-                },
-                'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'Accept-Encoding': 'gzip, deflate'
-                }
+                'extract_flat': False
             }
 
             related_videos = []
-            
-            # Method 1: Try to extract video info for recommendations
+
             try:
+                # Extract basic info from the current video
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(video_url, download=False)
-                    
-                    # Check if we have title and uploader info
+
                     if info and 'title' in info:
                         title = info['title']
                         uploader = info.get('uploader', '')
-                        
-                        # Method 2: Search for similar content based on title and uploader
-                        if title:
-                            # Create more refined search queries
-                            search_queries = []
-                            
-                            # Extract key words from title (remove common words)
-                            title_words = title.lower().split()
-                            common_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', '-', 'official', 'video', 'music', 'ft', 'feat', 'featuring'}
-                            key_words = [word for word in title_words if word not in common_words and len(word) > 2]
-                            
-                            if key_words:
-                                # Use key words for better search
-                                search_queries.append(' '.join(key_words[:3]))  # Top 3 key words
-                                
-                            if uploader:
-                                search_queries.append(f"{uploader}")
-                                
-                            # Fallback searches
-                            search_queries.append(f"{title[:30]}")  # First 30 chars of title
-                            
-                            # Try each search query
-                            for query in search_queries[:2]:  # Limit to 2 searches
-                                try:
-                                    await asyncio.sleep(0.5)  # Small delay to avoid rate limiting
-                                    search_info = ydl.extract_info(f"ytsearch3:{query}", download=False)
-                                    if search_info and 'entries' in search_info:
-                                        for entry in search_info['entries']:
-                                            if (entry and 'webpage_url' in entry and 
-                                                entry['webpage_url'] != video_url and 
-                                                entry.get('title')):  # Don't recommend the same video and ensure title exists
-                                                related_videos.append({
-                                                    'title': entry['title'],
-                                                    'webpage_url': entry['webpage_url'],
-                                                    'uploader': entry.get('uploader', 'Unknown')
-                                                })
-                                                if len(related_videos) >= 5:
-                                                    break
-                                except Exception as search_error:
-                                    print(f"Search query '{query}' failed: {search_error}")
-                                    continue
 
-                                if len(related_videos) >= 5:
-                                    break
-                                    
-            except Exception as info_error:
-                print(f"Info extraction failed: {info_error}")
-                
-            # Method 3: Fallback generic music search if no recommendations found
-            if not related_videos:
-                try:
-                    fallback_queries = ['popular music 2024', 'trending songs', 'top hits']
-                    for query in fallback_queries[:1]:  # Just try one fallback
-                        try:
-                            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                                search_info = ydl.extract_info(f"ytsearch3:{query}", download=False)
+                        # Create simple search queries based on the song
+                        search_queries = []
+
+                        # Use uploader for recommendations (artist's other songs)
+                        if uploader and uploader != 'Unknown':
+                            search_queries.append(uploader)
+
+                        # Use first few words of title
+                        title_words = title.split()[:3]  # First 3 words
+                        if title_words:
+                            search_queries.append(' '.join(title_words))
+
+                        # Try each search query
+                        for query in search_queries[:2]:  # Maximum 2 searches
+                            try:
+                                search_info = ydl.extract_info(f"ytsearch5:{query}", download=False)
                                 if search_info and 'entries' in search_info:
                                     for entry in search_info['entries']:
                                         if (entry and 'webpage_url' in entry and 
+                                            entry['webpage_url'] != video_url and 
                                             entry.get('title')):
                                             related_videos.append({
                                                 'title': entry['title'],
                                                 'webpage_url': entry['webpage_url'],
                                                 'uploader': entry.get('uploader', 'Unknown')
                                             })
-                                            if len(related_videos) >= 3:  # Less for fallback
+                                            if len(related_videos) >= 5:
                                                 break
-                        except Exception as fallback_error:
-                            print(f"Fallback search failed: {fallback_error}")
-                            break
-                except Exception as fallback_method_error:
-                    print(f"Fallback method failed: {fallback_method_error}")
+                            except Exception as search_error:
+                                print(f"Search for '{query}' failed: {search_error}")
+                                continue
 
-            return related_videos[:5]  # Return max 5 recommendations
+                            if len(related_videos) >= 5:
+                                break
+
+            except Exception as info_error:
+                print(f"Video info extraction failed: {info_error}")
+
+            # Fallback: Search for popular music if no recommendations found
+            if not related_videos:
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        fallback_info = ydl.extract_info("ytsearch5:popular music", download=False)
+                        if fallback_info and 'entries' in fallback_info:
+                            for entry in fallback_info['entries'][:3]:
+                                if entry and entry.get('title'):
+                                    related_videos.append({
+                                        'title': entry['title'],
+                                        'webpage_url': entry['webpage_url'],
+                                        'uploader': entry.get('uploader', 'Unknown')
+                                    })
+                except Exception as fallback_error:
+                    print(f"Fallback search failed: {fallback_error}")
+
+            print(f"Found {len(related_videos)} recommendations")
+            return related_videos[:5]
 
         except Exception as e:
             print(f"Recommendation error: {e}")
@@ -1103,11 +1071,11 @@ class Music(commands.Cog):
                 else:
                     search_query = f"ytsearch:{seed_query}"
                     info = ydl.extract_info(search_query, download=False)
-                    
+
                     # Check if search returned any results
                     if not info or 'entries' not in info or not info['entries']:
                         raise Exception("No search results found")
-                    
+
                     info = info['entries'][0]
 
                 seed_title = info['title']
@@ -1151,7 +1119,7 @@ class Music(commands.Cog):
 
         # Add seed song to queue
         self.queue[ctx.guild.id].append((seed_title, seed_url))
-        
+
         # Enable auto-play mode for this guild
         if not hasattr(self, 'auto_play_mode'):
             self.auto_play_mode = {}
