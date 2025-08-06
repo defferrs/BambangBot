@@ -319,6 +319,41 @@ class MusicControls(discord.ui.View):
             except:
                 pass
 
+class SearchResultsView(discord.ui.View):
+    def __init__(self, bot, ctx, search_results, voice_channel):
+        super().__init__(timeout=60)
+        self.bot = bot
+        self.ctx = ctx
+        self.search_results = search_results
+        self.voice_channel = voice_channel
+        
+        # Add buttons for each search result
+        for i, result in enumerate(search_results[:5]):
+            button = discord.ui.Button(
+                label=f"{i+1}. {result['title'][:40]}{'...' if len(result['title']) > 40 else ''}",
+                style=discord.ButtonStyle.primary,
+                custom_id=f"select_song_{i}",
+                emoji="🎵"
+            )
+            button.callback = self.create_song_callback(i)
+            self.add_item(button)
+    
+    def create_song_callback(self, index):
+        async def song_callback(interaction):
+            if interaction.user != self.ctx.author:
+                await interaction.response.send_message("❌ Only the person who requested the search can select a song!", ephemeral=True)
+                return
+            
+            selected_song = self.search_results[index]
+            await interaction.response.edit_message(content="🎵 Processing your selection...", embed=None, view=None)
+            
+            # Now play the selected song
+            music_cog = self.bot.get_cog('Music')
+            if music_cog:
+                await music_cog.play_selected_song(self.ctx, selected_song, self.voice_channel)
+        
+        return song_callback
+
 class QueueView(discord.ui.View):
     def __init__(self, bot, guild_id, page=0):
         super().__init__(timeout=300)
@@ -399,6 +434,104 @@ class Music(commands.Cog):
         except Exception as e:
             print(f"Search error: {e}")
             return None
+    
+    async def search_youtube_multiple(self, query, max_results=5):
+        """Search for multiple songs on YouTube"""
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extractflat': False,
+                'nocheckcertificate': True,
+                'ignoreerrors': True,
+                'default_search': 'ytsearch',
+                'extract_flat': False,
+                'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                search_query = f"ytsearch{max_results}:{query}"
+                info = ydl.extract_info(search_query, download=False)
+                
+                if not info or 'entries' not in info or not info['entries']:
+                    return []
+                
+                results = []
+                for entry in info['entries'][:max_results]:
+                    if entry:
+                        results.append({
+                            'title': entry.get('title', 'Unknown'),
+                            'url': entry.get('webpage_url', ''),
+                            'duration': entry.get('duration', 0),
+                            'uploader': entry.get('uploader', 'Unknown'),
+                            'thumbnail': entry.get('thumbnail', '')
+                        })
+                
+                return results
+        except Exception as e:
+            print(f"Multiple search error: {e}")
+            return []
+    
+    async def play_selected_song(self, ctx, selected_song, voice_channel):
+        """Play the selected song from search results"""
+        try:
+            # Connect to voice channel
+            voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
+            
+            try:
+                if not voice:
+                    voice = await voice_channel.connect(reconnect=True, timeout=60.0)
+                elif voice.channel != voice_channel:
+                    await voice.move_to(voice_channel)
+            except Exception as e:
+                error_embed = discord.Embed(
+                    title="❌ Voice Connection Failed",
+                    description=f"Could not connect to voice channel: {str(e)}",
+                    color=0xFF0000
+                )
+                await ctx.edit(embed=error_embed)
+                return
+
+            # Initialize queue if not exists
+            if ctx.guild.id not in self.queue:
+                self.queue[ctx.guild.id] = []
+
+            # Add to queue
+            self.queue[ctx.guild.id].append((selected_song['title'], selected_song['url']))
+            
+            # Track the song for potential auto-play recommendations
+            if not hasattr(self, 'last_played'):
+                self.last_played = {}
+            self.last_played[ctx.guild.id] = selected_song['url']
+
+            # If not currently playing, start playing
+            if not voice.is_playing() and not voice.is_paused():
+                await self.play_next(ctx, voice)
+            else:
+                # Song added to queue
+                embed = discord.Embed(
+                    title="📝 Added to Queue",
+                    description=f"**{selected_song['title']}**\n\nPosition in queue: **{len(self.queue[ctx.guild.id])}**",
+                    color=0x00FF00
+                )
+                embed.add_field(name="Duration", value=f"{selected_song['duration']//60}:{selected_song['duration']%60:02d}" if selected_song['duration'] else "Unknown", inline=True)
+                embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
+                embed.add_field(name="Uploader", value=selected_song['uploader'], inline=True)
+                
+                if selected_song['thumbnail']:
+                    embed.set_thumbnail(url=selected_song['thumbnail'])
+                embed.set_footer(text="🎵 Your song will play when queue reaches it • Use 🎲 button for auto-play")
+
+                view = MusicControls(self.bot)
+                await ctx.edit(embed=embed, view=view)
+                
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Playback Failed",
+                description=f"Could not play the selected song: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.edit(embed=error_embed)
 
     @slash_command(description="🎵 Play music from YouTube with interactive controls")
     async def play(self, ctx, *, query: Option(str, "Song name or YouTube URL")):
@@ -433,135 +566,79 @@ class Music(commands.Cog):
         )
         await ctx.respond(embed=loading_embed)
 
-        # Search for the song with enhanced options and bot detection avoidance
-        ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'extractflat': False,
-            'nocheckcertificate': True,
-            'ignoreerrors': True,
-            'default_search': 'ytsearch',
-            'extract_flat': False,
-            'age_limit': 18,
-            'cookiefile': None,
-            'extractor_args': {
-                'youtube': {
-                    'skip': ['dash', 'hls'],
-                    'player_skip': ['configs', 'webpage'],
-                    'player_client': ['android', 'web']
-                }
-            },
-            'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
+        # Check if it's a direct YouTube URL
+        if 'youtube.com' in query or 'youtu.be' in query:
+            # Direct URL - extract info and play immediately
+            ydl_opts = {
+                'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+                'quiet': True,
+                'no_warnings': True,
+                'extractflat': False,
+                'nocheckcertificate': True,
+                'ignoreerrors': True,
+                'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
             }
-        }
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                if 'youtube.com' in query or 'youtu.be' in query:
+            
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(query, download=False)
-                else:
-                    search_query = f"ytsearch:{query}"
-                    info = ydl.extract_info(search_query, download=False)
-                    
-                    # Check if search returned any results
-                    if not info or 'entries' not in info or not info['entries']:
-                        raise Exception("No search results found")
-                    
-                    info = info['entries'][0]
-
-                title = info['title']
-                url = info['webpage_url']
-                duration = info.get('duration', 0)
-                thumbnail = info.get('thumbnail', '')
-
-        except Exception as e:
-            error_embed = discord.Embed(
-                title="❌ Search Failed",
-                description=f"Could not find or play: **{query}**\n\nError: {str(e)}",
-                color=0xFF0000
-            )
-            await ctx.edit(embed=error_embed)
-            return
-
-        # Connect to voice channel with better error handling
-        voice_channel = ctx.author.voice.channel
-        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
-
-        try:
-            if not voice:
-                voice = await voice_channel.connect(reconnect=True, timeout=60.0)
-            elif voice.channel != voice_channel:
-                await voice.move_to(voice_channel)
-        except discord.ClientException as e:
-            if "already connected to a voice channel" in str(e).lower():
-                try:
-                    await voice.disconnect(force=True)
-                    await asyncio.sleep(1)
-                    voice = await voice_channel.connect(reconnect=True, timeout=60.0)
-                except Exception as reconnect_error:
-                    error_embed = discord.Embed(
-                        title="❌ Voice Connection Failed",
-                        description=f"Could not connect to voice channel: {str(reconnect_error)}",
-                        color=0xFF0000
-                    )
-                    await ctx.edit(embed=error_embed)
+                    selected_song = {
+                        'title': info['title'],
+                        'url': info['webpage_url'],
+                        'duration': info.get('duration', 0),
+                        'thumbnail': info.get('thumbnail', ''),
+                        'uploader': info.get('uploader', 'Unknown')
+                    }
+                    await self.play_selected_song(ctx, selected_song, voice_channel)
                     return
-            else:
+            except Exception as e:
                 error_embed = discord.Embed(
-                    title="❌ Voice Connection Failed",
-                    description=f"Could not connect to voice channel: {str(e)}",
+                    title="❌ URL Processing Failed",
+                    description=f"Could not process YouTube URL: **{query}**\n\nError: {str(e)}",
                     color=0xFF0000
                 )
                 await ctx.edit(embed=error_embed)
                 return
-        except Exception as e:
-            error_embed = discord.Embed(
-                title="❌ Voice Connection Failed",
-                description=f"Could not connect to voice channel: {str(e)}",
-                color=0xFF0000
+        else:
+            # Search query - show multiple results
+            search_results = await self.search_youtube_multiple(query, 5)
+            
+            if not search_results:
+                error_embed = discord.Embed(
+                    title="❌ Search Failed",
+                    description=f"Could not find any results for: **{query}**\n\nTry using different keywords or a direct YouTube URL.",
+                    color=0xFF0000
+                )
+                await ctx.edit(embed=error_embed)
+                return
+            
+            # Create search results embed
+            embed = discord.Embed(
+                title="🔍 Search Results",
+                description=f"Found **{len(search_results)}** results for: **{query}**\n\nClick a button below to select a song:",
+                color=0x1DB954
             )
-            await ctx.edit(embed=error_embed)
+            
+            for i, result in enumerate(search_results):
+                duration_str = f"{result['duration']//60}:{result['duration']%60:02d}" if result['duration'] else "Unknown"
+                embed.add_field(
+                    name=f"{i+1}. {result['title'][:50]}{'...' if len(result['title']) > 50 else ''}",
+                    value=f"**Duration:** {duration_str} | **Uploader:** {result['uploader'][:20]}{'...' if len(result['uploader']) > 20 else ''}",
+                    inline=False
+                )
+            
+            embed.set_footer(text="🎵 Select a song using the buttons below • 60 seconds to choose")
+            
+            if search_results[0]['thumbnail']:
+                embed.set_thumbnail(url=search_results[0]['thumbnail'])
+            
+            # Create view with selection buttons
+            view = SearchResultsView(self.bot, ctx, search_results, voice_channel)
+            await ctx.edit(embed=embed, view=view)
             return
 
-        # Initialize queue if not exists
-        if ctx.guild.id not in self.queue:
-            self.queue[ctx.guild.id] = []
-
-        # Add to queue
-        self.queue[ctx.guild.id].append((title, url))
-        
-        # Track the song for potential auto-play recommendations
-        if not hasattr(self, 'last_played'):
-            self.last_played = {}
-        self.last_played[ctx.guild.id] = url
-
-        # If not currently playing, start playing
-        if not voice.is_playing() and not voice.is_paused():
-            await self.play_next(ctx, voice)
-        else:
-            # Song added to queue
-            embed = discord.Embed(
-                title="📝 Added to Queue",
-                description=f"**{title}**\n\nPosition in queue: **{len(self.queue[ctx.guild.id])}**",
-                color=0x00FF00
-            )
-            embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}" if duration else "Unknown", inline=True)
-            embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
-            if thumbnail:
-                embed.set_thumbnail(url=thumbnail)
-            embed.set_footer(text="🎵 Your song will play when queue reaches it • Use 🎲 button for auto-play")
-
-            view = MusicControls(self.bot)
-            await ctx.edit(embed=embed, view=view)
+        # Get voice channel for later use
+        voice_channel = ctx.author.voice.channel
 
     async def play_next(self, ctx, voice):
         """Play the next song in queue"""
