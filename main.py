@@ -33,6 +33,27 @@ async def on_ready():
     except ImportError:
         print("⚠️ Voice support disabled (PyNaCl not installed)")
     
+    # Check Opus library
+    try:
+        if not discord.opus.is_loaded():
+            # Try different opus library names
+            opus_loaded = False
+            for opus_name in ['libopus.so.0', 'libopus.so', 'opus', 'libopus']:
+                try:
+                    discord.opus.load_opus(opus_name)
+                    opus_loaded = True
+                    print(f"✅ Opus library loaded ({opus_name})")
+                    break
+                except:
+                    continue
+            
+            if not opus_loaded:
+                print("⚠️ Opus library not found - music features may not work")
+        else:
+            print("✅ Opus library already loaded")
+    except Exception as e:
+        print(f"⚠️ Opus check failed: {e}")
+    
     try:
         synced = await bot.sync_commands()
         if synced is not None:

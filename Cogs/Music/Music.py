@@ -21,8 +21,21 @@ except ImportError:
 
 try:
     import opuslib
+    OPUS_ENABLED = True
 except ImportError:
-    print("Warning: opuslib not installed, opus encoding may not work optimally")
+    OPUS_ENABLED = False
+    print("Warning: opuslib not installed, trying to load from discord")
+
+# Try to load opus from discord.py
+if not OPUS_ENABLED:
+    try:
+        if not discord.opus.is_loaded():
+            # Try to load opus library
+            discord.opus.load_opus('opus')
+        OPUS_ENABLED = True
+    except Exception as e:
+        print(f"Failed to load Opus: {e}")
+        OPUS_ENABLED = False
 
 # FFmpeg options for better audio quality
 FFMPEG_OPTIONS = {
@@ -280,6 +293,28 @@ class Music(commands.Cog):
             )
             await ctx.edit(embed=error_embed)
             return
+
+        # Check opus library
+        if not OPUS_ENABLED and not discord.opus.is_loaded():
+            error_embed = discord.Embed(
+                title="❌ Audio Codec Missing",
+                description="Opus library is required for audio playback. Attempting to load...",
+                color=0xFF0000
+            )
+            await ctx.edit(embed=error_embed)
+            try:
+                discord.opus.load_opus('libopus')
+            except:
+                try:
+                    discord.opus.load_opus('opus')
+                except:
+                    error_embed = discord.Embed(
+                        title="❌ Audio Codec Failed",
+                        description="Could not load Opus library. Music features unavailable.",
+                        color=0xFF0000
+                    )
+                    await ctx.edit(embed=error_embed)
+                    return
 
         # Connect to voice channel with better error handling
         voice_channel = ctx.author.voice.channel
