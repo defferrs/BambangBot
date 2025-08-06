@@ -1,7 +1,7 @@
 
 import discord
 from discord.ext import commands
-from discord.commands import slash_command, Option
+from discord import app_commands
 
 class RoleConfirmationView(discord.ui.View):
     def __init__(self, member, role, action_type, moderator):
@@ -216,28 +216,29 @@ class AddRole(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @slash_command(description="👤 Interactive role management panel")
-    async def rolemanager(self, ctx, member: Option(discord.Member, "Member to manage roles for")):
+    @app_commands.command(name="rolemanager", description="👤 Interactive role management panel")
+    @app_commands.describe(member="Member to manage roles for")
+    async def rolemanager(self, interaction: discord.Interaction, member: discord.Member):
         """Interactive role management with modern UI"""
-        if not ctx.author.guild_permissions.manage_roles:
+        if not interaction.user.guild_permissions.manage_roles:
             embed = discord.Embed(
                 title="❌ Permission Denied",
                 description="You don't have permission to manage roles!",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         embed = discord.Embed(
             title="👤 Role Management Panel",
-            description=f"**Target:** {member.mention}\n**Manager:** {ctx.author.mention}",
+            description=f"**Target:** {member.mention}\n**Manager:** {interaction.user.mention}",
             color=0x9B59B6
         )
         
-        member_roles = [role for role in member.roles if role != ctx.guild.default_role]
+        member_roles = [role for role in member.roles if role != interaction.guild.default_role]
         embed.add_field(
             name="📊 Current Status",
-            value=f"**Current Roles:** {len(member_roles)}\n**Joined:** {member.joined_at.strftime('%Y-%m-%d')}\n**Top Role:** {member.top_role.mention if member.top_role != ctx.guild.default_role else 'None'}",
+            value=f"**Current Roles:** {len(member_roles)}\n**Joined:** {member.joined_at.strftime('%Y-%m-%d')}\n**Top Role:** {member.top_role.mention if member.top_role != interaction.guild.default_role else 'None'}",
             inline=True
         )
         
@@ -251,27 +252,28 @@ class AddRole(commands.Cog):
         embed.set_footer(text="👤 Interactive role management • Mobile friendly")
 
         view = RoleManagerView(member)
-        await ctx.respond(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view)
 
-    @slash_command(description="➕ Add role to member (classic command)")
-    async def addrole(self, ctx, member: Option(discord.Member, "Member to give role to"), role: Option(discord.Role, "Role to give")):
+    @app_commands.command(name="addrole", description="➕ Add role to member (classic command)")
+    @app_commands.describe(member="Member to give role to", role="Role to give")
+    async def addrole(self, interaction: discord.Interaction, member: discord.Member, role: discord.Role):
         """Add role with confirmation dialog"""
-        if not ctx.author.guild_permissions.manage_roles:
+        if not interaction.user.guild_permissions.manage_roles:
             embed = discord.Embed(
                 title="❌ Permission Denied",
                 description="You don't have permission to manage roles!",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        if role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+        if role >= interaction.user.top_role and interaction.user != interaction.guild.owner:
             embed = discord.Embed(
                 title="❌ Cannot Add Role",
                 description="You cannot assign a role equal to or higher than your highest role!",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         if role in member.roles:
@@ -280,7 +282,7 @@ class AddRole(commands.Cog):
                 description=f"{member.mention} already has the {role.mention} role!",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed)
+            await interaction.response.send_message(embed=embed)
             return
 
         embed = discord.Embed(
@@ -291,8 +293,8 @@ class AddRole(commands.Cog):
         embed.add_field(name="Role Info", value=f"**Members:** {len(role.members)}\n**Color:** {str(role.color)}", inline=True)
         embed.set_thumbnail(url=member.display_avatar.url)
 
-        view = RoleConfirmationView(member, role, "add", ctx.author)
-        await ctx.respond(embed=embed, view=view)
+        view = RoleConfirmationView(member, role, "add", interaction.user)
+        await interaction.response.send_message(embed=embed, view=view)
 
 def setup(bot):
     bot.add_cog(AddRole(bot))
