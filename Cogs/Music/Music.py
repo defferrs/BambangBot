@@ -829,18 +829,18 @@ def setup(bot):
     try:
         # Try to ensure Opus is loaded before adding the cog
         if not discord.opus.is_loaded():
-            opus_loaded = load_opus_library()
-            if not opus_loaded:
-                print("Warning: Opus library not available, music features may be limited")
+            try:
+                opus_loaded = load_opus_library()
+                if not opus_loaded:
+                    print("Warning: Opus library not available, music features may be limited")
+            except Exception as opus_error:
+                print(f"Warning: Opus loading failed: {opus_error}")
         
+        # Always try to add the cog - errors will be handled in individual commands
         bot.add_cog(Music(bot))
         print("Enhanced Music cog loaded with interactive controls")
+        
     except Exception as e:
-        print(f"Failed to load Music.Music: {e}")
-        try:
-            # Try to load the cog anyway with limited functionality
-            bot.add_cog(Music(bot))
-            print("Music cog loaded with limited voice capabilities")
-        except Exception as fallback_error:
-            print(f"Critical: Could not load Music cog at all: {fallback_error}")
-            raise fallback_error
+        # If cog loading fails completely, print error but don't crash
+        print(f"Failed to load Music.Music: Extension 'Cogs.Music.Music' raised an error: {e}")
+        print("Music cog will not be available")
