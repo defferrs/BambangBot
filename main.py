@@ -20,18 +20,18 @@ bot = commands.Bot(
 
 @bot.event
 async def on_ready():
-    print(f'\n🤖 {bot.user} is now ONLINE and ready!')
-    print(f'📱 Mobile-optimized UI activated')
-    print(f'🌟 All-in-One bot features loaded')
-    print(f'🏠 Connected to {len(bot.guilds)} servers')
-    print(f'👥 Serving {len(bot.users)} users')
+    print(f'\n🤖 {bot.user} sekarang ONLINE dan siap!')
+    print(f'📱 UI dioptimalkan untuk mobile telah aktif')
+    print(f'🌟 Semua fitur bot All-in-One telah dimuat')
+    print(f'🏠 Terhubung ke {len(bot.guilds)} server')
+    print(f'👥 Melayani {len(bot.users)} pengguna')
     
     # Check voice capabilities
     try:
         import nacl
-        print("✅ Voice support enabled (PyNaCl installed)")
+        print("✅ Dukungan voice diaktifkan (PyNaCl terinstal)")
     except ImportError:
-        print("⚠️ Voice support disabled (PyNaCl not installed)")
+        print("⚠️ Dukungan voice dinonaktifkan (PyNaCl tidak terinstal)")
     
     # Check Opus library
     try:
@@ -42,27 +42,27 @@ async def on_ready():
                 try:
                     discord.opus.load_opus(opus_name)
                     opus_loaded = True
-                    print(f"✅ Opus library loaded ({opus_name})")
+                    print(f"✅ Library Opus dimuat ({opus_name})")
                     break
                 except:
                     continue
             
             if not opus_loaded:
-                print("⚠️ Opus library not found - music features may not work")
+                print("⚠️ Library Opus tidak ditemukan - fitur musik mungkin tidak berfungsi")
         else:
-            print("✅ Opus library already loaded")
+            print("✅ Library Opus sudah dimuat")
     except Exception as e:
-        print(f"⚠️ Opus check failed: {e}")
+        print(f"⚠️ Pemeriksaan Opus gagal: {e}")
     
     try:
         synced = await bot.sync_commands()
         if synced is not None:
-            print(f"✅ Synced {len(synced)} slash commands")
+            print(f"✅ Disinkronkan {len(synced)} slash command")
         else:
-            print("✅ Commands synced successfully")
-        print(f'🚀 Bot is fully operational with interactive features!')
+            print("✅ Command berhasil disinkronkan")
+        print(f'🚀 Bot sepenuhnya operasional dengan fitur interaktif!')
     except Exception as e:
-        print(f"❌ Failed to sync commands: {e}")
+        print(f"❌ Gagal menyinkronkan command: {e}")
 
 @bot.event
 async def on_guild_join(guild):
@@ -82,30 +82,30 @@ async def on_guild_join(guild):
     
     if channel:
         embed = discord.Embed(
-            title="🤖 Thank you for adding me!",
-            description="**I'm your new all-in-one Discord bot with stunning visuals and mobile optimization!**",
+            title="🤖 Terima kasih telah menambahkan saya!",
+            description="**Saya bot Discord all-in-one baru Anda dengan visual menakjubkan dan optimasi mobile!**",
             color=0x00D4FF
         )
         
         embed.add_field(
-            name="🌟 What I can do:",
-            value="```\n🛡️ Advanced Moderation\n🎵 High-Quality Music\n👤 Role Management\n🔍 Google Search\n⚙️ Server Settings```",
+            name="🌟 Apa yang bisa saya lakukan:",
+            value="```\n🛡️ Moderasi Canggih\n🎵 Musik Berkualitas Tinggi\n👤 Manajemen Role\n🔍 Pencarian Google\n⚙️ Pengaturan Server```",
             inline=True
         )
         
         embed.add_field(
-            name="📱 Mobile Features:",
-            value="```\n✅ Touch-friendly buttons\n✅ Interactive menus\n✅ Responsive design\n✅ Optimized layouts```",
+            name="📱 Fitur Mobile:",
+            value="```\n✅ Tombol ramah sentuh\n✅ Menu interaktif\n✅ Desain responsif\n✅ Layout yang dioptimalkan```",
             inline=True
         )
         
         embed.add_field(
-            name="🚀 Get Started:",
-            value="Use `/help` to see all my features!\nAll commands work perfectly on mobile devices.",
+            name="🚀 Mulai:",
+            value="Gunakan `/bantuan` untuk melihat semua fitur saya!\nSemua command berfungsi sempurna di perangkat mobile.",
             inline=False
         )
         
-        embed.set_footer(text="🎯 Type /help to explore all features • Mobile optimized")
+        embed.set_footer(text="🎯 Ketik /bantuan untuk menjelajahi semua fitur • Dioptimalkan untuk mobile")
         
         try:
             await channel.send(embed=embed)

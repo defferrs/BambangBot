@@ -1,4 +1,5 @@
 
+
 import discord
 from discord.ext import commands
 from discord.commands import slash_command
@@ -7,37 +8,37 @@ class CategorySelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(
-                label="🛡️ Moderation",
-                description="Server moderation commands",
+                label="🛡️ Moderasi",
+                description="Perintah moderasi server",
                 emoji="🛡️",
                 value="moderation"
             ),
             discord.SelectOption(
-                label="🎵 Music",
-                description="Music player commands",
+                label="🎵 Musik",
+                description="Perintah pemutar musik",
                 emoji="🎵",
                 value="music"
             ),
             discord.SelectOption(
-                label="👤 Role Management",
-                description="Role and reaction role commands",
+                label="👤 Manajemen Role",
+                description="Perintah role dan reaction role",
                 emoji="👤",
                 value="role"
             ),
             discord.SelectOption(
-                label="🔍 Search",
-                description="Google search commands",
+                label="🔍 Pencarian",
+                description="Perintah pencarian Google",
                 emoji="🔍",
                 value="search"
             ),
             discord.SelectOption(
-                label="⚙️ Server Settings",
-                description="Server configuration commands",
+                label="⚙️ Pengaturan Server",
+                description="Perintah konfigurasi server",
                 emoji="⚙️",
                 value="server"
             )
         ]
-        super().__init__(placeholder="🎯 Select a category to explore...", options=options, min_values=1, max_values=1)
+        super().__init__(placeholder="🎯 Pilih kategori untuk dijelajahi...", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: discord.Interaction):
         category = self.values[0]
@@ -58,135 +59,157 @@ class CategorySelect(discord.ui.Select):
 
     def create_moderation_embed(self):
         embed = discord.Embed(
-            title="🛡️ Moderation Commands",
-            description="Powerful moderation tools to keep your server safe and organized",
+            title="🛡️ Perintah Moderasi",
+            description="Alat moderasi yang kuat untuk menjaga server Anda tetap aman dan terorganisir",
             color=0xFF4B4B
         )
         
         commands_data = [
-            ("🧹 /clear", "Bulk delete messages", "amount (1-100)"),
-            ("👢 /kick", "Remove member from server", "member, reason (optional)"),
-            ("🔨 /ban", "Permanently ban member", "member, reason (optional)"),
-            ("🔓 /unban", "Unban member by ID", "member_id"),
-            ("🔇 /mute", "Mute member in server", "member, reason (optional)"),
-            ("🔊 /unmute", "Unmute member", "member"),
-            ("⏰ /timeout", "Timeout member", "member, minutes (1-40320)"),
-            ("⚠️ /warn", "Issue warning to member", "member, reason"),
-            ("📋 /warnings", "View member warnings", "member (optional)")
+            ("🧹 /bersihkan", "Hapus pesan secara massal", "jumlah (1-100)"),
+            ("👢 /tendang", "Keluarkan anggota dari server", "anggota, alasan (opsional)"),
+            ("🔨 /ban", "Ban anggota secara permanen", "anggota, alasan (opsional)"),
+            ("🔓 /batalban", "Batal ban anggota berdasarkan ID", "id_anggota"),
+            ("🔇 /bisu", "Bisu anggota di server", "anggota, alasan (opsional)"),
+            ("🔊 /batalbus", "Batal bisu anggota", "anggota"),
+            ("⏰ /timeout", "Timeout anggota", "anggota, menit (1-40320)"),
+            ("⚠️ /peringatkan", "Berikan peringatan kepada anggota", "anggota, alasan"),
+            ("📋 /peringatan", "Lihat peringatan anggota", "anggota (opsional)"),
+            ("🔒 /kunci", "Kunci channel", "channel (opsional)"),
+            ("🔓 /bukakunci", "Buka kunci channel", "channel (opsional)"),
+            ("🧹 /bersihkanbot", "Hapus pesan bot", "jumlah (opsional)"),
+            ("📝 /slowmode", "Atur slowmode channel", "detik (0-21600)"),
+            ("🏷️ /nick", "Ubah nickname anggota", "anggota, nickname_baru"),
+            ("📊 /moderasi", "Panel kontrol moderasi interaktif", "anggota")
         ]
         
         for emoji_cmd, desc, params in commands_data:
             embed.add_field(
                 name=emoji_cmd,
-                value=f"**Function:** {desc}\n**Parameters:** {params}",
+                value=f"**Fungsi:** {desc}\n**Parameter:** {params}",
                 inline=True
             )
         
-        embed.set_footer(text="🛡️ Requires appropriate permissions • Mobile optimized", icon_url="https://cdn.discordapp.com/emojis/852564304993501244.png")
+        embed.set_footer(text="🛡️ Memerlukan izin yang sesuai • Dioptimalkan untuk mobile")
         return embed
 
     def create_music_embed(self):
         embed = discord.Embed(
-            title="🎵 Music Commands",
-            description="High-quality music streaming from YouTube with queue management",
+            title="🎵 Perintah Musik",
+            description="Streaming musik berkualitas tinggi dari YouTube dengan manajemen antrian",
             color=0x1DB954
         )
         
         commands_data = [
-            ("▶️ /play", "Play music from YouTube", "query (song name or URL)"),
-            ("⏹️ /stop", "Stop music and clear queue", "None"),
-            ("⏭️ /skip", "Skip to next song", "None"),
-            ("⏸️ /pause", "Pause current song", "None"),
-            ("▶️ /resume", "Resume paused song", "None"),
-            ("📝 /queue", "Show music queue", "None"),
-            ("🔀 /shuffle", "Shuffle queue order", "None"),
-            ("🗑️ /remove", "Remove song from queue", "position (1-∞)")
+            ("▶️ /putar", "Putar musik dari YouTube", "kueri (nama lagu atau URL)"),
+            ("⏹️ /berhenti", "Hentikan musik dan hapus antrian", "Tidak ada"),
+            ("⏭️ /lewati", "Lewati ke lagu berikutnya", "Tidak ada"),
+            ("⏸️ /jeda", "Jeda lagu saat ini", "Tidak ada"),
+            ("▶️ /lanjut", "Lanjutkan lagu yang dijeda", "Tidak ada"),
+            ("📝 /antrian", "Tampilkan antrian musik", "Tidak ada"),
+            ("🔀 /acak", "Acak urutan antrian", "Tidak ada"),
+            ("🗑️ /hapus", "Hapus lagu dari antrian", "posisi (1-∞)"),
+            ("🔊 /volume", "Atur volume musik", "level (1-100)"),
+            ("🔁 /ulangi", "Ulangi lagu/antrian", "mode (lagu/antrian/mati)"),
+            ("ℹ️ /sedangputar", "Info lagu yang sedang diputar", "Tidak ada"),
+            ("💾 /simpan", "Simpan lagu ke playlist pribadi", "Tidak ada")
         ]
         
         for emoji_cmd, desc, params in commands_data:
             embed.add_field(
                 name=emoji_cmd,
-                value=f"**Function:** {desc}\n**Parameters:** {params}",
+                value=f"**Fungsi:** {desc}\n**Parameter:** {params}",
                 inline=True
             )
         
-        embed.set_footer(text="🎵 Join a voice channel first • High quality audio", icon_url="https://cdn.discordapp.com/emojis/852564304993501244.png")
+        embed.set_footer(text="🎵 Bergabunglah dengan voice channel terlebih dahulu • Audio berkualitas tinggi")
         return embed
 
     def create_role_embed(self):
         embed = discord.Embed(
-            title="👤 Role Management",
-            description="Advanced role management with reaction roles and automation",
+            title="👤 Manajemen Role",
+            description="Manajemen role canggih dengan reaction role dan otomatisasi",
             color=0x9B59B6
         )
         
         commands_data = [
-            ("➕ /addrole", "Add role to member", "member, role"),
-            ("➖ /removerole", "Remove role from member", "member, role"),
-            ("🎭 /add_reaction_role", "Create reaction role", "role, channel, emoji"),
-            ("🗑️ /remove_reaction_role", "Delete reaction role", "role"),
-            ("📋 /list_reaction_roles", "List all reaction roles", "None")
+            ("➕ /tambahrole", "Tambah role ke anggota", "anggota, role"),
+            ("➖ /hapusrole", "Hapus role dari anggota", "anggota, role"),
+            ("🎭 /tambah_reaction_role", "Buat reaction role", "role, channel, emoji"),
+            ("🗑️ /hapus_reaction_role", "Hapus reaction role", "role"),
+            ("📋 /daftar_reaction_role", "Daftar semua reaction role", "Tidak ada"),
+            ("👤 /rolemanager", "Panel manajemen role interaktif", "anggota"),
+            ("🔄 /sinkronrole", "Sinkronisasi role server", "Tidak ada"),
+            ("📊 /inforole", "Informasi detail role", "role"),
+            ("🎨 /warnrole", "Ubah warna role", "role, warna_hex"),
+            ("👥 /anggotarole", "Daftar anggota dengan role", "role")
         ]
         
         for emoji_cmd, desc, params in commands_data:
             embed.add_field(
                 name=emoji_cmd,
-                value=f"**Function:** {desc}\n**Parameters:** {params}",
+                value=f"**Fungsi:** {desc}\n**Parameter:** {params}",
                 inline=True
             )
         
-        embed.set_footer(text="👤 Bot must have Manage Roles permission", icon_url="https://cdn.discordapp.com/emojis/852564304993501244.png")
+        embed.set_footer(text="👤 Bot harus memiliki izin Kelola Role")
         return embed
 
     def create_search_embed(self):
         embed = discord.Embed(
-            title="🔍 Search Commands",
-            description="Instant Google search results with smart formatting",
+            title="🔍 Perintah Pencarian",
+            description="Hasil pencarian Google instan dengan format yang cerdas",
             color=0xF39C12
         )
         
         embed.add_field(
-            name="🔍 /search",
-            value="**Function:** Search Google for information\n**Parameters:** query (search terms)\n**Results:** Top 5 results with descriptions",
+            name="🔍 /cari",
+            value="**Fungsi:** Cari Google untuk informasi\n**Parameter:** kueri (istilah pencarian)\n**Hasil:** 5 hasil teratas dengan deskripsi",
             inline=False
         )
         
         embed.add_field(
-            name="✨ Features",
-            value="• Smart result filtering\n• Mobile-friendly formatting\n• Instant results\n• Safe search enabled",
+            name="✨ Fitur",
+            value="• Penyaringan hasil yang cerdas\n• Format ramah mobile\n• Hasil instan\n• Pencarian aman diaktifkan",
             inline=True
         )
         
-        embed.set_footer(text="🔍 Powered by Google Search API", icon_url="https://cdn.discordapp.com/emojis/852564304993501244.png")
+        embed.set_footer(text="🔍 Didukung oleh Google Search API")
         return embed
 
     def create_server_embed(self):
         embed = discord.Embed(
-            title="⚙️ Server Settings",
-            description="Comprehensive server management and configuration tools",
+            title="⚙️ Pengaturan Server",
+            description="Alat manajemen dan konfigurasi server yang komprehensif",
             color=0xE67E22
         )
         
         commands_data = [
-            ("👥 /member_count", "Show server member count", "None"),
-            ("👋 /setup_goodbye", "Configure goodbye messages", "enabled, channel, message"),
-            ("🔄 /sync_commands", "Sync slash commands", "None (Admin only)")
+            ("👥 /jumlah_anggota", "Tampilkan jumlah anggota server", "Tidak ada"),
+            ("👋 /atur_selamatjalan", "Konfigurasi pesan selamat jalan", "aktif, channel, pesan"),
+            ("🔄 /sinkron_perintah", "Sinkronisasi slash command", "Tidak ada (Khusus Admin)"),
+            ("📊 /info_server", "Informasi detail server", "Tidak ada"),
+            ("⚙️ /pengaturan", "Panel pengaturan server", "Tidak ada"),
+            ("📢 /pengumuman", "Buat pengumuman server", "pesan, channel"),
+            ("🔔 /notifikasi", "Atur sistem notifikasi", "tipe, channel"),
+            ("📈 /statistik", "Statistik server lengkap", "Tidak ada"),
+            ("🎯 /automod", "Pengaturan auto moderasi", "aktif/nonaktif"),
+            ("💬 /atur_welcome", "Pengaturan pesan welcome", "Tidak ada")
         ]
         
         for emoji_cmd, desc, params in commands_data:
             embed.add_field(
                 name=emoji_cmd,
-                value=f"**Function:** {desc}\n**Parameters:** {params}",
+                value=f"**Fungsi:** {desc}\n**Parameter:** {params}",
                 inline=True
             )
         
         embed.add_field(
-            name="🤖 Auto Features",
-            value="• Welcome DM for new members\n• Join/leave logging\n• Auto-settings per server\n• Mobile notifications",
+            name="🤖 Fitur Otomatis",
+            value="• DM welcome untuk anggota baru\n• Log join/leave\n• Pengaturan otomatis per server\n• Notifikasi mobile",
             inline=False
         )
         
-        embed.set_footer(text="⚙️ Settings saved automatically per server", icon_url="https://cdn.discordapp.com/emojis/852564304993501244.png")
+        embed.set_footer(text="⚙️ Pengaturan disimpan otomatis per server")
         return embed
 
 class CategoryView(discord.ui.View):
@@ -194,81 +217,74 @@ class CategoryView(discord.ui.View):
         super().__init__(timeout=300)
         self.add_item(CategorySelect())
 
-    @discord.ui.button(label="🏠 Main Menu", style=discord.ButtonStyle.secondary, emoji="🏠")
+    @discord.ui.button(label="🏠 Menu Utama", style=discord.ButtonStyle.secondary, emoji="🏠")
     async def main_menu(self, button: discord.ui.Button, interaction: discord.Interaction):
         embed = discord.Embed(
-            title="🤖 All-in-One Discord Bot",
-            description="**Your complete server management solution**\n\n✨ Select a category below to explore available commands",
+            title="🤖 Bot Discord All-in-One",
+            description="**Solusi manajemen server lengkap Anda**\n\n✨ Pilih kategori di bawah ini untuk menjelajahi perintah yang tersedia",
             color=0x00D4FF
         )
         
         embed.add_field(
-            name="🌟 Features",
-            value="```\n🛡️ Advanced Moderation\n🎵 High-Quality Music\n👤 Smart Role Management\n🔍 Instant Search\n⚙️ Server Automation```",
+            name="🌟 Fitur",
+            value="```\n🛡️ Moderasi Canggih\n🎵 Musik Berkualitas Tinggi\n👤 Manajemen Role Cerdas\n🔍 Pencarian Instan\n⚙️ Otomatisasi Server```",
             inline=True
         )
         
         embed.add_field(
-            name="📱 Mobile Optimized",
-            value="```\n✅ Touch-friendly buttons\n✅ Responsive layouts\n✅ Quick interactions\n✅ Smooth performance```",
+            name="📱 Dioptimalkan untuk Mobile",
+            value="```\n✅ Tombol ramah sentuh\n✅ Layout responsif\n✅ Interaksi cepat\n✅ Performa lancar```",
             inline=True
         )
         
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/123456789/bot-icon.png")
-        embed.set_footer(text="🚀 Powered by advanced AI • Optimized for mobile", icon_url="https://cdn.discordapp.com/emojis/852564304993501244.png")
+        embed.set_footer(text="🚀 Didukung oleh AI canggih • Dioptimalkan untuk mobile")
         
         view = CategoryView()
         await interaction.response.edit_message(embed=embed, view=view)
 
-    @discord.ui.button(label="📊 Bot Stats", style=discord.ButtonStyle.success, emoji="📊")
+    @discord.ui.button(label="📊 Statistik Bot", style=discord.ButtonStyle.success, emoji="📊")
     async def bot_stats(self, button: discord.ui.Button, interaction: discord.Interaction):
         bot = interaction.client
         
         embed = discord.Embed(
-            title="📊 Bot Statistics",
-            description="Real-time performance metrics",
+            title="📊 Statistik Bot",
+            description="Metrik performa real-time",
             color=0x00FF88
         )
         
-        embed.add_field(name="🏠 Servers", value=f"```{len(bot.guilds)}```", inline=True)
-        embed.add_field(name="👥 Users", value=f"```{len(bot.users)}```", inline=True)
+        embed.add_field(name="🏠 Server", value=f"```{len(bot.guilds)}```", inline=True)
+        embed.add_field(name="👥 Pengguna", value=f"```{len(bot.users)}```", inline=True)
         embed.add_field(name="🔗 Latency", value=f"```{round(bot.latency * 1000)}ms```", inline=True)
-        embed.add_field(name="⚡ Commands", value="```50+ Commands```", inline=True)
-        embed.add_field(name="🎵 Music Quality", value="```320kbps```", inline=True)
-        embed.add_field(name="📱 Mobile Ready", value="```100%```", inline=True)
+        embed.add_field(name="⚡ Perintah", value="```50+ Perintah```", inline=True)
+        embed.add_field(name="🎵 Kualitas Musik", value="```320kbps```", inline=True)
+        embed.add_field(name="📱 Siap Mobile", value="```100%```", inline=True)
         
-        embed.set_footer(text="📊 Updated in real-time", icon_url="https://cdn.discordapp.com/emojis/852564304993501244.png")
+        embed.set_footer(text="📊 Diperbarui secara real-time")
         
         view = CategoryView()
         await interaction.response.edit_message(embed=embed, view=view)
 
-    @discord.ui.button(label="🆘 Support", style=discord.ButtonStyle.danger, emoji="🆘")
+    @discord.ui.button(label="🆘 Bantuan", style=discord.ButtonStyle.danger, emoji="🆘")
     async def support(self, button: discord.ui.Button, interaction: discord.Interaction):
         embed = discord.Embed(
-            title="🆘 Need Help?",
-            description="Get support and learn more about the bot",
+            title="🆘 Butuh Bantuan?",
+            description="Dapatkan dukungan dan pelajari lebih lanjut tentang bot",
             color=0xFF3366
         )
         
         embed.add_field(
-            name="📝 Quick Tips",
-            value="• Use `/help` for command categories\n• Check permissions if commands fail\n• Join voice channel for music\n• Report bugs via DM to bot owner",
+            name="📝 Tips Cepat",
+            value="• Gunakan `/bantuan` untuk kategori perintah\n• Periksa izin jika perintah gagal\n• Bergabung dengan voice channel untuk musik\n• Laporkan bug via DM ke pemilik bot",
             inline=False
         )
         
         embed.add_field(
-            name="🔗 Useful Links",
-            value="[📚 Documentation](https://example.com/docs)\n[🐛 Report Bug](https://example.com/bug)\n[💡 Suggest Feature](https://example.com/feature)",
-            inline=True
-        )
-        
-        embed.add_field(
             name="⚡ Status",
-            value="🟢 **Online**\n🔄 Auto-updates\n📱 Mobile optimized",
+            value="🟢 **Online**\n🔄 Update otomatis\n📱 Dioptimalkan untuk mobile",
             inline=True
         )
         
-        embed.set_footer(text="🆘 Support available 24/7", icon_url="https://cdn.discordapp.com/emojis/852564304993501244.png")
+        embed.set_footer(text="🆘 Dukungan tersedia 24/7")
         
         view = CategoryView()
         await interaction.response.edit_message(embed=embed, view=view)
@@ -277,34 +293,34 @@ class Help(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @slash_command(description="🎯 Interactive help menu with categories and buttons")
+    @slash_command(name="bantuan", description="🎯 Menu bantuan interaktif dengan kategori dan tombol")
     async def help(self, ctx):
-        """Modern interactive help system with categories and buttons"""
+        """Sistem bantuan interaktif modern dengan kategori dan tombol"""
         
         embed = discord.Embed(
-            title="🤖 All-in-One Discord Bot",
-            description="**Your complete server management solution**\n\n✨ Select a category below to explore available commands",
+            title="🤖 Bot Discord All-in-One",
+            description="**Solusi manajemen server lengkap Anda**\n\n✨ Pilih kategori di bawah ini untuk menjelajahi perintah yang tersedia",
             color=0x00D4FF
         )
         
         embed.add_field(
-            name="🌟 Features",
-            value="```\n🛡️ Advanced Moderation\n🎵 High-Quality Music\n👤 Smart Role Management\n🔍 Instant Search\n⚙️ Server Automation```",
+            name="🌟 Fitur",
+            value="```\n🛡️ Moderasi Canggih\n🎵 Musik Berkualitas Tinggi\n👤 Manajemen Role Cerdas\n🔍 Pencarian Instan\n⚙️ Otomatisasi Server```",
             inline=True
         )
         
         embed.add_field(
-            name="📱 Mobile Optimized",
-            value="```\n✅ Touch-friendly buttons\n✅ Responsive layouts\n✅ Quick interactions\n✅ Smooth performance```",
+            name="📱 Dioptimalkan untuk Mobile",
+            value="```\n✅ Tombol ramah sentuh\n✅ Layout responsif\n✅ Interaksi cepat\n✅ Performa lancar```",
             inline=True
         )
         
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/123456789/bot-icon.png")
-        embed.set_footer(text="🚀 Powered by advanced AI • Optimized for mobile", icon_url="https://cdn.discordapp.com/emojis/852564304993501244.png")
+        embed.set_footer(text="🚀 Didukung oleh AI canggih • Dioptimalkan untuk mobile")
         
         view = CategoryView()
         await ctx.respond(embed=embed, view=view)
 
 def setup(bot):
     bot.add_cog(Help(bot))
-    print("Enhanced Help cog loaded with interactive UI")
+    print("Enhanced Help cog dimuat dengan UI interaktif")
+
