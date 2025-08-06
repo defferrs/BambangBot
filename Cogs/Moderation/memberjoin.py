@@ -208,8 +208,10 @@ class memberjoin(commands.Cog):
             @discord.ui.button(label="📝 Set Message", style=discord.ButtonStyle.primary, emoji="📝")
             async def set_message(self, button: discord.ui.Button, interaction: discord.Interaction):
                 class MessageModal(discord.ui.Modal):
-                    def __init__(self):
+                    def __init__(self, guild_settings, cog):
                         super().__init__(title="Set Welcome Message")
+                        self.guild_settings = guild_settings
+                        self.cog = cog
                         self.message_input = discord.ui.InputText(
                             label="Welcome Message",
                             placeholder="Use {member} for mention, {guild} for server name",
@@ -224,7 +226,7 @@ class memberjoin(commands.Cog):
                         self.cog.save_settings()
                         await interaction.response.send_message("✅ Welcome message updated!", ephemeral=True)
 
-                await interaction.response.send_modal(MessageModal())
+                await interaction.response.send_modal(MessageModal(self.guild_settings, self.cog))
 
             @discord.ui.button(label="📺 Set Channel", style=discord.ButtonStyle.secondary, emoji="📺")
             async def set_channel(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -249,7 +251,7 @@ class memberjoin(commands.Cog):
                         self.add_item(select)
 
                     async def channel_callback(self, interaction):
-                        channel_id = int(self.select.values[0])
+                        channel_id = int(interaction.data['values'][0])
                         channel = interaction.guild.get_channel(channel_id)
                         self.guild_settings["welcome_channel"] = channel_id
                         self.cog.save_settings()
@@ -289,7 +291,7 @@ class memberjoin(commands.Cog):
                             self.add_item(select)
 
                     async def role_callback(self, interaction):
-                        role_id = int(self.select.values[0])
+                        role_id = int(interaction.data['values'][0])
                         role = interaction.guild.get_role(role_id)
                         self.guild_settings["auto_role"] = role_id
                         self.cog.save_settings()
