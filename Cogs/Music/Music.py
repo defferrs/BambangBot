@@ -47,18 +47,29 @@ def load_opus_library():
                 # Silent fail for individual attempts
                 continue
         
-        print("⚠️ Could not load Opus library with any known names")
         return False
         
     except Exception as e:
-        print(f"⚠️ Opus loading function encountered an error: {e}")
         return False
 
-# Initialize OPUS_ENABLED safely - no operations during import
-if not OPUS_ENABLED:
-    # Don't do any loading during module import to prevent startup issues
-    # All checks will be done during command execution
-    pass
+def check_voice_dependencies():
+    """Check voice dependencies at runtime"""
+    global VOICE_ENABLED, OPUS_ENABLED
+    
+    # Check PyNaCl
+    if not VOICE_ENABLED:
+        try:
+            import nacl
+            VOICE_ENABLED = True
+        except ImportError:
+            return False, "PyNaCl not available"
+    
+    # Check Opus
+    if not OPUS_ENABLED and not discord.opus.is_loaded():
+        if not load_opus_library():
+            return False, "Opus library not available"
+    
+    return True, "All dependencies ready"
 
 # FFmpeg options for better audio quality
 FFMPEG_OPTIONS = {
@@ -225,6 +236,7 @@ class Music(commands.Cog):
         self.queue = {}
         self.current_song = {}
         self.auto_play_mode = {}  # Track guilds in auto-play mode
+        # Don't check dependencies during __init__ to prevent startup failures
     
     async def search_youtube(self, query):
         """Search for music on YouTube"""
@@ -247,26 +259,16 @@ class Music(commands.Cog):
     async def play(self, ctx, *, query: Option(str, "Song name or YouTube URL")):
         """Play music with modern interactive controls"""
         
-        # Check voice dependencies first
-        if not VOICE_ENABLED:
+        # Check all dependencies at runtime
+        deps_ready, deps_message = check_voice_dependencies()
+        if not deps_ready:
             embed = discord.Embed(
                 title="❌ Voice Dependencies Missing",
-                description="PyNaCl is required for voice features. Music functionality is currently unavailable.",
+                description=f"{deps_message}\n\nMusic functionality is currently unavailable.",
                 color=0xFF0000
             )
             await ctx.respond(embed=embed)
             return
-        
-        # Check opus library
-        if not OPUS_ENABLED and not discord.opus.is_loaded():
-            if not load_opus_library():
-                embed = discord.Embed(
-                    title="❌ Audio Codec Missing",
-                    description="Opus library is required for audio playback. Music functionality is currently unavailable.",
-                    color=0xFF0000
-                )
-                await ctx.respond(embed=embed)
-                return
         
         # Check if user is in voice channel
         if not ctx.author.voice:
@@ -850,39 +852,8 @@ class Music(commands.Cog):
 
 def setup(bot):
     """Setup function that never fails - always loads the cog"""
-    voice_ready = True
-    opus_ready = True
-    
-    # Check voice dependencies silently
-    if not VOICE_ENABLED:
-        print("Info: Music cog - PyNaCl will be checked when needed")
-        voice_ready = False
-    
-    # Check opus availability silently
-    if not OPUS_ENABLED and not discord.opus.is_loaded():
-        print("Info: Music cog - Opus will be loaded when needed")
-        opus_ready = False
-    
-    # Always create and add the cog - no exceptions allowed
-    try:
-        music_cog = Music(bot)
-        bot.add_cog(music_cog)
-        print("✅ Music cog loaded successfully")
-        
-        if voice_ready and opus_ready:
-            print("  ↳ All dependencies ready")
-        else:
-            print("  ↳ Dependencies will be checked during first use")
-            
-    except Exception as e:
-        # Even if Music class fails, create a minimal placeholder
-        print(f"⚠️ Music cog had issues during creation: {e}")
-        print("  ↳ Music commands may have limited functionality")
-        
-        # Create a minimal music cog that won't crash
-        try:
-            music_cog = Music(bot)
-            bot.add_cog(music_cog)
-        except:
-            print("  ↳ Unable to load Music cog at all - music commands disabled")
-            pass  # Silently fail rather than crash the bot
+    # Always create and add the cog - no dependency checks during startup
+    music_cog = Music(bot)
+    bot.add_cog(music_cog)
+    print("✅ Music cog loaded successfully")
+    print("  ↳ Dependencies will be checked when commands are used")
