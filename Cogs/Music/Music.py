@@ -174,6 +174,7 @@ class Music(commands.Cog):
         self.bot = bot
         self.queue = {}
         self.current_song = {}
+        self.auto_play_mode = {}  # Track guilds in auto-play mode
     
     async def search_youtube(self, query):
         """Search for music on YouTube"""
@@ -303,10 +304,27 @@ class Music(commands.Cog):
     async def play_next(self, ctx, voice):
         """Play the next song in queue"""
         if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+            # Auto-play mode: If queue is empty, try to get more recommendations
+            if hasattr(self, 'auto_play_mode') and ctx.guild.id in getattr(self, 'auto_play_mode', {}):
+                last_played = getattr(self, 'auto_play_mode', {}).get(ctx.guild.id)
+                if last_played:
+                    new_recommendations = await self.get_youtube_recommendations(last_played)
+                    if new_recommendations:
+                        for rec in new_recommendations[:3]:  # Add 3 more songs
+                            self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
+                        # Continue playing
+                        if self.queue[ctx.guild.id]:
+                            await self.play_next(ctx, voice)
             return
 
         title, url = self.queue[ctx.guild.id].pop(0)
         self.current_song[ctx.guild.id] = title
+        
+        # Track for auto-play mode
+        if not hasattr(self, 'auto_play_mode'):
+            self.auto_play_mode = {}
+        if ctx.guild.id in getattr(self, 'auto_play_mode', {}):
+            self.auto_play_mode[ctx.guild.id] = url
 
         # Get audio source with multiple fallback methods
         ydl_opts_play = {
@@ -526,6 +544,193 @@ class Music(commands.Cog):
         )
         embed.add_field(name="Remaining Songs", value=f"{len(self.queue[ctx.guild.id])} in queue", inline=True)
         await ctx.respond(embed=embed)
+
+    async def get_youtube_recommendations(self, video_url):
+        """Get YouTube recommendations based on a video URL"""
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extractflat': False,
+                'nocheckcertificate': True,
+                'ignoreerrors': True,
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=False)
+                
+                # Try to get related videos from video info
+                related_videos = []
+                
+                # Method 1: Check if there are related entries
+                if 'related_videos' in info:
+                    related_videos = info['related_videos'][:5]
+                
+                # Method 2: Search for similar content based on title and uploader
+                if not related_videos and 'title' in info:
+                    title = info['title']
+                    uploader = info.get('uploader', '')
+                    
+                    # Create search queries based on the current video
+                    search_queries = [
+                        f"{title} similar",
+                        f"{uploader} music",
+                        f"{title.split()[0]} {title.split()[-1]}" if len(title.split()) > 1 else title
+                    ]
+                    
+                    for query in search_queries[:2]:  # Limit to 2 searches to avoid rate limiting
+                        try:
+                            search_info = ydl.extract_info(f"ytsearch3:{query}", download=False)
+                            if 'entries' in search_info:
+                                for entry in search_info['entries']:
+                                    if entry['webpage_url'] != video_url:  # Don't recommend the same video
+                                        related_videos.append({
+                                            'title': entry['title'],
+                                            'webpage_url': entry['webpage_url'],
+                                            'uploader': entry.get('uploader', 'Unknown')
+                                        })
+                                        if len(related_videos) >= 5:
+                                            break
+                        except:
+                            continue
+                        
+                        if len(related_videos) >= 5:
+                            break
+
+                return related_videos[:5]  # Return max 5 recommendations
+                
+        except Exception as e:
+            print(f"Recommendation error: {e}")
+            return []
+
+    @slash_command(description="🎲 Auto-play with YouTube recommendations")
+    async def auto_play(self, ctx, *, seed_query: Option(str, "Starting song or search term for recommendations")):
+        """Auto-play system with YouTube recommendations"""
+        
+        # Check if user is in voice channel
+        if not ctx.author.voice:
+            embed = discord.Embed(
+                title="❌ Voice Channel Required",
+                description="You need to join a voice channel first!",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed)
+            return
+
+        # Loading embed
+        loading_embed = discord.Embed(
+            title="🎲 Auto-Play Starting...",
+            description=f"Finding **{seed_query}** and getting recommendations...",
+            color=0x9B59B6
+        )
+        await ctx.respond(embed=loading_embed)
+
+        # Search for the seed song
+        ydl_opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+            'extractflat': False,
+            'nocheckcertificate': True,
+            'ignoreerrors': True,
+            'default_search': 'ytsearch',
+            'extract_flat': False,
+            'age_limit': 18,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                if 'youtube.com' in seed_query or 'youtu.be' in seed_query:
+                    info = ydl.extract_info(seed_query, download=False)
+                else:
+                    search_query = f"ytsearch:{seed_query}"
+                    info = ydl.extract_info(search_query, download=False)
+                    info = info['entries'][0]
+
+                seed_title = info['title']
+                seed_url = info['webpage_url']
+                duration = info.get('duration', 0)
+                thumbnail = info.get('thumbnail', '')
+
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Auto-Play Failed",
+                description=f"Could not find: **{seed_query}**\n\nError: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.edit(embed=error_embed)
+            return
+
+        # Connect to voice channel
+        voice_channel = ctx.author.voice.channel
+        voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
+
+        try:
+            if not voice:
+                voice = await voice_channel.connect()
+            elif voice.channel != voice_channel:
+                await voice.move_to(voice_channel)
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Voice Connection Failed",
+                description=f"Could not connect to voice channel: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.edit(embed=error_embed)
+            return
+
+        # Initialize queue if not exists
+        if ctx.guild.id not in self.queue:
+            self.queue[ctx.guild.id] = []
+
+        # Clear existing queue for auto-play mode
+        self.queue[ctx.guild.id].clear()
+
+        # Add seed song to queue
+        self.queue[ctx.guild.id].append((seed_title, seed_url))
+
+        # Get recommendations based on the seed song
+        update_embed = discord.Embed(
+            title="🎲 Getting Recommendations...",
+            description=f"Added **{seed_title}** to queue\nFinding similar songs...",
+            color=0x9B59B6
+        )
+        await ctx.edit(embed=update_embed)
+
+        recommendations = await self.get_youtube_recommendations(seed_url)
+        
+        # Add recommendations to queue
+        for rec in recommendations:
+            self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
+
+        # Start playing
+        if not voice.is_playing() and not voice.is_paused():
+            await self.play_next(ctx, voice)
+        
+        # Auto-play started embed
+        embed = discord.Embed(
+            title="🎲 Auto-Play Started!",
+            description=f"**Now Playing:** {seed_title}\n\n**Recommendations Added:** {len(recommendations)} songs",
+            color=0x9B59B6
+        )
+        embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
+        embed.add_field(name="Mode", value="🎲 Auto-Play", inline=True)
+        embed.add_field(name="Based on", value=f"**{seed_title}**", inline=True)
+        
+        if thumbnail:
+            embed.set_thumbnail(url=thumbnail)
+        
+        # Show some recommendations
+        if recommendations:
+            rec_list = "\n".join([f"• {rec['title'][:40]}{'...' if len(rec['title']) > 40 else ''}" for rec in recommendations[:3]])
+            embed.add_field(name="🎵 Coming Up", value=rec_list, inline=False)
+        
+        embed.set_footer(text="🎲 Auto-Play will continue with recommendations • Use buttons to control")
+
+        view = MusicControls(self.bot)
+        await ctx.edit(embed=embed, view=view)
 
 def setup(bot):
     bot.add_cog(Music(bot))
