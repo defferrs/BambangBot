@@ -155,7 +155,7 @@ class MusicControls(discord.ui.View):
                 embed = discord.Embed(
                     title="⏭️ Song Skipped",
                     description="Skipped to the next song in queue!" + 
-                               ("\n🎲 Auto-play: Getting more recommendations..." if is_auto_play else ""),
+                               ("\n🎵 Auto-play: Getting more recommendations..." if is_auto_play else ""),
                     color=0x3498DB
                 )
                 await interaction.response.edit_message(embed=embed, view=self)
@@ -200,6 +200,98 @@ class MusicControls(discord.ui.View):
             except:
                 pass
 
+    @discord.ui.button(emoji="🎵", style=discord.ButtonStyle.secondary, custom_id="autoplay")
+    async def autoplay_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        try:
+            music_cog = self.bot.get_cog('Music')
+            if not music_cog:
+                await interaction.response.send_message("❌ Music system not available!", ephemeral=True)
+                return
+
+            # Initialize auto_play_mode if it doesn't exist
+            if not hasattr(music_cog, 'auto_play_mode'):
+                music_cog.auto_play_mode = {}
+
+            guild_id = interaction.guild.id
+
+            # Toggle auto-play mode
+            if guild_id in music_cog.auto_play_mode:
+                # Disable auto-play
+                del music_cog.auto_play_mode[guild_id]
+                embed = discord.Embed(
+                    title="🎵 Auto-Play Disabled",
+                    description="Auto-play mode has been turned off. Music will stop after the current queue ends.",
+                    color=0xFF6B6B
+                )
+                await interaction.response.edit_message(embed=embed, view=self)
+            else:
+                # Enable auto-play - need a current song to base recommendations on
+                current_song_url = None
+
+                # Try to get the last played song or current song
+                if hasattr(music_cog, 'last_played') and guild_id in music_cog.last_played:
+                    current_song_url = music_cog.last_played[guild_id]
+                elif hasattr(music_cog, 'queue') and guild_id in music_cog.queue and music_cog.queue[guild_id]:
+                    # Get URL from current queue
+                    current_song_url = music_cog.queue[guild_id][0][1] if music_cog.queue[guild_id] else None
+
+                if current_song_url:
+                    # Enable auto-play
+                    music_cog.auto_play_mode[guild_id] = current_song_url
+
+                    # Get recommendations and add to queue
+                    embed = discord.Embed(
+                        title="🎵 Auto-Play Enabled!",
+                        description="Getting recommendations based on current music...",
+                        color=0x9B59B6
+                    )
+                    await interaction.response.edit_message(embed=embed, view=self)
+
+                    # Add recommendations to queue
+                    try:
+                        recommendations = await music_cog.get_youtube_recommendations(current_song_url)
+
+                        # Initialize queue if needed
+                        if guild_id not in music_cog.queue:
+                            music_cog.queue[guild_id] = []
+
+                        for rec in recommendations:
+                            music_cog.queue[guild_id].append((rec['title'], rec['webpage_url']))
+
+                        # Update embed with success message
+                        success_embed = discord.Embed(
+                            title="🎵 Auto-Play Enabled!",
+                            description=f"Added **{len(recommendations)}** recommended songs to queue.\n\nAuto-play will continue finding similar music!",
+                            color=0x9B59B6
+                        )
+
+                        if recommendations:
+                            rec_list = "\n".join([f"• {rec['title'][:30]}{'...' if len(rec['title']) > 30 else ''}" for rec in recommendations[:3]])
+                            success_embed.add_field(name="🎵 Added to Queue", value=rec_list, inline=False)
+
+                        await interaction.edit_original_response(embed=success_embed, view=self)
+
+                    except Exception as rec_error:
+                        print(f"Auto-play recommendation error: {rec_error}")
+                        error_embed = discord.Embed(
+                            title="🎵 Auto-Play Enabled",
+                            description="Auto-play mode is now active, but couldn't get recommendations right now. It will try again when songs change.",
+                            color=0xFFA500
+                        )
+                        await interaction.edit_original_response(embed=error_embed, view=self)
+                else:
+                    await interaction.response.send_message("❌ No current song to base recommendations on! Play a song first.", ephemeral=True)
+
+        except discord.NotFound:
+            # Interaction already responded to or expired
+            pass
+        except Exception as e:
+            print(f"Auto-play button error: {e}")
+            try:
+                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
+            except:
+                pass
+
     @discord.ui.button(emoji="🔀", style=discord.ButtonStyle.secondary, custom_id="shuffle")
     async def shuffle_button(self, button: discord.ui.Button, interaction: discord.Interaction):
         try:
@@ -226,98 +318,7 @@ class MusicControls(discord.ui.View):
                 await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
             except:
                 pass
-
-    @discord.ui.button(emoji="🎲", style=discord.ButtonStyle.secondary, custom_id="autoplay")
-    async def autoplay_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        try:
-            music_cog = self.bot.get_cog('Music')
-            if not music_cog:
-                await interaction.response.send_message("❌ Music system not available!", ephemeral=True)
-                return
-
-            # Initialize auto_play_mode if it doesn't exist
-            if not hasattr(music_cog, 'auto_play_mode'):
-                music_cog.auto_play_mode = {}
-
-            guild_id = interaction.guild.id
-
-            # Toggle auto-play mode
-            if guild_id in music_cog.auto_play_mode:
-                # Disable auto-play
-                del music_cog.auto_play_mode[guild_id]
-                embed = discord.Embed(
-                    title="🎲 Auto-Play Disabled",
-                    description="Auto-play mode has been turned off. Music will stop after the current queue ends.",
-                    color=0xFF6B6B
-                )
-                await interaction.response.edit_message(embed=embed, view=self)
-            else:
-                # Enable auto-play - need a current song to base recommendations on
-                current_song_url = None
-
-                # Try to get the last played song or current song
-                if hasattr(music_cog, 'last_played') and guild_id in music_cog.last_played:
-                    current_song_url = music_cog.last_played[guild_id]
-                elif hasattr(music_cog, 'queue') and guild_id in music_cog.queue and music_cog.queue[guild_id]:
-                    # Get URL from current queue
-                    current_song_url = music_cog.queue[guild_id][0][1] if music_cog.queue[guild_id] else None
-
-                if current_song_url:
-                    # Enable auto-play
-                    music_cog.auto_play_mode[guild_id] = current_song_url
-
-                    # Get recommendations and add to queue
-                    embed = discord.Embed(
-                        title="🎲 Auto-Play Enabled!",
-                        description="Getting recommendations based on current music...",
-                        color=0x9B59B6
-                    )
-                    await interaction.response.edit_message(embed=embed, view=self)
-
-                    # Add recommendations to queue
-                    try:
-                        recommendations = await music_cog.get_youtube_recommendations(current_song_url)
-
-                        # Initialize queue if needed
-                        if guild_id not in music_cog.queue:
-                            music_cog.queue[guild_id] = []
-
-                        for rec in recommendations:
-                            music_cog.queue[guild_id].append((rec['title'], rec['webpage_url']))
-
-                        # Update embed with success message
-                        success_embed = discord.Embed(
-                            title="🎲 Auto-Play Enabled!",
-                            description=f"Added **{len(recommendations)}** recommended songs to queue.\n\nAuto-play will continue finding similar music!",
-                            color=0x9B59B6
-                        )
-
-                        if recommendations:
-                            rec_list = "\n".join([f"• {rec['title'][:30]}{'...' if len(rec['title']) > 30 else ''}" for rec in recommendations[:3]])
-                            success_embed.add_field(name="🎵 Added to Queue", value=rec_list, inline=False)
-
-                        await interaction.edit_original_response(embed=success_embed, view=self)
-
-                    except Exception as rec_error:
-                        print(f"Auto-play recommendation error: {rec_error}")
-                        error_embed = discord.Embed(
-                            title="🎲 Auto-Play Enabled",
-                            description="Auto-play mode is now active, but couldn't get recommendations right now. It will try again when songs change.",
-                            color=0xFFA500
-                        )
-                        await interaction.edit_original_response(embed=error_embed, view=self)
-                else:
-                    await interaction.response.send_message("❌ No current song to base recommendations on! Play a song first.", ephemeral=True)
-
-        except discord.NotFound:
-            # Interaction already responded to or expired
-            pass
-        except Exception as e:
-            print(f"Auto-play button error: {e}")
-            try:
-                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
-            except:
-                pass
+    
 
 class SearchResultsView(discord.ui.View):
     def __init__(self, bot, ctx, search_results, voice_channel):
@@ -520,7 +521,7 @@ class Music(commands.Cog):
 
                 if selected_song['thumbnail']:
                     embed.set_thumbnail(url=selected_song['thumbnail'])
-                embed.set_footer(text="🎵 Your song will play when queue reaches it • Use 🎲 button for auto-play")
+                embed.set_footer(text="🎵 Your song will play when queue reaches it • Use 🎵 button for auto-play")
 
                 view = MusicControls(self.bot)
                 await ctx.edit(embed=embed, view=view)
@@ -1128,7 +1129,7 @@ class Music(commands.Cog):
         # Get recommendations based on the seed song
         update_embed = discord.Embed(
             title="🎲 Getting Recommendations...",
-            description=f"Added **{seed_title}** to queue\nFinding similar songs...\n\n🎲 **Auto-play mode activated!**",
+            description=f"Added **{seed_title}** to queue\nFinding similar songs...\n\n🎵 **Auto-play mode activated!**",
             color=0x9B59B6
         )
         await ctx.edit(embed=update_embed)
@@ -1150,7 +1151,7 @@ class Music(commands.Cog):
             color=0x9B59B6
         )
         embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
-        embed.add_field(name="Mode", value="🎲 Auto-Play", inline=True)
+        embed.add_field(name="Mode", value="🎵 Auto-Play", inline=True)
         embed.add_field(name="Based on", value=f"**{seed_title}**", inline=True)
 
         if thumbnail:
@@ -1161,7 +1162,7 @@ class Music(commands.Cog):
             rec_list = "\n".join([f"• {rec['title'][:40]}{'...' if len(rec['title']) > 40 else ''}" for rec in recommendations[:3]])
             embed.add_field(name="🎵 Coming Up", value=rec_list, inline=False)
 
-        embed.set_footer(text="🎲 Auto-Play will continue with recommendations • Use buttons to control")
+        embed.set_footer(text="🎵 Auto-Play will continue with recommendations • Use buttons to control")
 
         view = MusicControls(self.bot)
         await ctx.edit(embed=embed, view=view)
