@@ -30,32 +30,38 @@ except ImportError:
 def load_opus_library():
     """Load opus library with multiple fallback options"""
     try:
+        # Check if already loaded
         if discord.opus.is_loaded():
             return True
         
+        # List of possible opus library names to try
         opus_names = ['libopus.so.0', 'libopus.so', 'opus', 'libopus', 'libopus-0.dll', 'opus.dll']
         
         for opus_name in opus_names:
             try:
                 discord.opus.load_opus(opus_name)
-                print(f"✅ Opus library loaded ({opus_name})")
-                return True
-            except Exception:
+                if discord.opus.is_loaded():
+                    print(f"✅ Opus library loaded ({opus_name})")
+                    return True
+            except Exception as e:
+                # Silent fail for individual attempts
                 continue
         
+        print("⚠️ Could not load Opus library with any known names")
         return False
+        
     except Exception as e:
-        print(f"Warning: Opus loading function failed: {e}")
+        print(f"⚠️ Opus loading function encountered an error: {e}")
         return False
 
 # Initialize OPUS_ENABLED with better error handling
 if not OPUS_ENABLED:
     try:
-        OPUS_ENABLED = load_opus_library()
-        if not OPUS_ENABLED:
-            print("Warning: Could not load Opus library during initialization")
+        # Don't try to load opus during module import to prevent startup issues
+        # Let the setup function handle it instead
+        print("Info: Opus library will be checked during cog setup")
     except Exception as e:
-        print(f"Warning: Could not load Opus library: {e}")
+        print(f"Warning: Opus initialization check failed: {e}")
         OPUS_ENABLED = False
 
 # FFmpeg options for better audio quality
@@ -857,15 +863,22 @@ def setup(bot):
             print("Warning: Voice dependencies missing (PyNaCl)")
             voice_ready = False
         
-        # Check opus without raising exceptions
-        if not OPUS_ENABLED and not discord.opus.is_loaded():
-            try:
-                opus_ready = load_opus_library()
-                if not opus_ready:
-                    print("Warning: Opus library not available")
-            except Exception:
-                print("Warning: Opus loading failed")
-                opus_ready = False
+        # Check opus with improved error handling
+        if not OPUS_ENABLED:
+            if not discord.opus.is_loaded():
+                try:
+                    opus_ready = load_opus_library()
+                    if not opus_ready:
+                        print("Warning: Opus library not available during setup")
+                except Exception as e:
+                    print(f"Warning: Opus loading failed during setup: {e}")
+                    opus_ready = False
+            else:
+                opus_ready = True
+                print("✅ Opus library already loaded")
+        else:
+            opus_ready = True
+            print("✅ Opus support available via opuslib")
         
         # Create and add the cog regardless of dependencies
         # Individual commands will handle missing dependencies gracefully
@@ -874,9 +887,12 @@ def setup(bot):
         
         if voice_ready and opus_ready:
             print("✅ Enhanced Music cog loaded with full voice capabilities")
+        elif voice_ready:
+            print("⚠️ Music cog loaded with voice support but limited audio capabilities")
         else:
             print("⚠️ Music cog loaded with limited capabilities (missing dependencies)")
             
     except Exception as e:
-        print(f"❌ Critical: Failed to load Music cog: {e}")
+        print(f"❌ Failed to load Music cog: {e}")
+        print("Music functionality will not be available")
         # Don't re-raise the exception to prevent bot startup failure
