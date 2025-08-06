@@ -1,11 +1,10 @@
 
 import discord
 from discord.ext import commands
-from discord import app_commands
+from discord.commands import slash_command, Option
 import datetime
 import json
 import os
-import asyncio
 
 class ConfirmationView(discord.ui.View):
     def __init__(self, action_type, target, moderator):
@@ -147,22 +146,21 @@ class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="modpanel", description="🛡️ Quick moderation panel for a member")
-    @app_commands.describe(member="Member to moderate")
-    async def modpanel(self, interaction: discord.Interaction, member: discord.Member):
+    @slash_command(description="🛡️ Quick moderation panel for a member")
+    async def modpanel(self, ctx, member: Option(discord.Member, "Member to moderate")):
         """Interactive moderation panel"""
-        if not interaction.user.guild_permissions.kick_members:
+        if not ctx.author.guild_permissions.kick_members:
             embed = discord.Embed(
                 title="❌ Permission Denied",
                 description="You don't have permission to use moderation commands!",
                 color=0xFF0000
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await ctx.respond(embed=embed, ephemeral=True)
             return
 
         embed = discord.Embed(
             title="🛡️ Moderation Panel",
-            description=f"**Target:** {member.mention}\n**Moderator:** {interaction.user.mention}",
+            description=f"**Target:** {member.mention}\n**Moderator:** {ctx.author.mention}",
             color=0x3498DB
         )
         
@@ -182,75 +180,69 @@ class Moderation(commands.Cog):
         embed.set_footer(text="🛡️ Mobile optimized moderation • Quick and secure")
 
         view = ModerationActions(member)
-        await interaction.response.send_message(embed=embed, view=view)
+        await ctx.respond(embed=embed, view=view)
 
-    @app_commands.command(name="clear", description="🧹 Clear messages with confirmation")
-    @app_commands.describe(amount="Number of messages to delete (1-100)")
-    async def clear(self, interaction: discord.Interaction, amount: int):
+    @slash_command(description="🧹 Clear messages with confirmation")
+    async def clear(self, ctx, amount: Option(int, "Number of messages to delete (1-100)", min_value=1, max_value=100)):
         """Clear messages with interactive confirmation"""
-        if amount < 1 or amount > 100:
-            await interaction.response.send_message("❌ Amount must be between 1 and 100!", ephemeral=True)
-            return
-            
-        if not interaction.user.guild_permissions.manage_messages:
+        if not ctx.author.guild_permissions.manage_messages:
             embed = discord.Embed(
                 title="❌ Permission Denied",
                 description="You don't have permission to manage messages!",
                 color=0xFF0000
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await ctx.respond(embed=embed, ephemeral=True)
             return
 
         embed = discord.Embed(
             title="🧹 Confirm Message Deletion",
-            description=f"Are you sure you want to delete **{amount}** messages from {interaction.channel.mention}?",
+            description=f"Are you sure you want to delete **{amount}** messages from {ctx.channel.mention}?",
             color=0xFFA500
         )
         embed.add_field(name="⚠️ Warning", value="This action cannot be undone!", inline=False)
 
-        view = ConfirmationView("Clear messages", interaction.channel, interaction.user)
-        await interaction.response.send_message(embed=embed, view=view)
+        view = ConfirmationView("Clear messages", ctx.channel, ctx.author)
+        await ctx.respond(embed=embed, view=view)
         
         await view.wait()
         
         if view.confirmed:
-            deleted = await interaction.channel.purge(limit=amount)
+            deleted = await ctx.channel.purge(limit=amount + 1)  # +1 to include the command message
             
             embed = discord.Embed(
                 title="🧹 Messages Cleared",
-                description=f"Successfully deleted **{len(deleted)}** messages from {interaction.channel.mention}",
+                description=f"Successfully deleted **{len(deleted)-1}** messages from {ctx.channel.mention}",
                 color=0x00FF00
             )
             embed.set_footer(text="🧹 Channel cleaned successfully")
             
             # Send temporary message that deletes itself
-            message = await interaction.followup.send(embed=embed)
+            message = await ctx.followup.send(embed=embed)
             await asyncio.sleep(5)
             try:
                 await message.delete()
             except:
                 pass
 
-    @app_commands.command(name="kick", description="👢 Kick member with confirmation")
-    @app_commands.describe(member="Member to kick", reason="Reason for kick")
-    async def kick(self, interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    @slash_command(description="👢 Kick member with confirmation")
+    async def kick(self, ctx, member: Option(discord.Member, "Member to kick"), reason: Option(str, "Reason for kick", required=False, default="No reason provided")):
         """Kick member with interactive confirmation"""
-        if not interaction.user.guild_permissions.kick_members:
+        if not ctx.author.guild_permissions.kick_members:
             embed = discord.Embed(
                 title="❌ Permission Denied",
                 description="You don't have permission to kick members!",
                 color=0xFF0000
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await ctx.respond(embed=embed, ephemeral=True)
             return
 
-        if member.top_role >= interaction.user.top_role and interaction.user != interaction.guild.owner:
+        if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
             embed = discord.Embed(
                 title="❌ Cannot Kick",
                 description="You cannot kick someone with a role equal to or higher than yours!",
                 color=0xFF0000
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await ctx.respond(embed=embed, ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -261,24 +253,24 @@ class Moderation(commands.Cog):
         embed.add_field(name="Reason", value=reason, inline=False)
         embed.add_field(name="⚠️ Warning", value="They can rejoin with a new invite!", inline=False)
 
-        view = ConfirmationView("Kick", member, interaction.user)
-        await interaction.response.send_message(embed=embed, view=view)
+        view = ConfirmationView("Kick", member, ctx.author)
+        await ctx.respond(embed=embed, view=view)
         
         await view.wait()
         
         if view.confirmed:
             try:
-                await member.kick(reason=f"Kicked by {interaction.user} - {reason}")
+                await member.kick(reason=f"Kicked by {ctx.author} - {reason}")
                 
                 embed = discord.Embed(
                     title="👢 Member Kicked",
                     description=f"{member.mention} has been kicked from the server",
                     color=0x00FF00
                 )
-                embed.add_field(name="Moderator", value=interaction.user.mention, inline=True)
+                embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
                 embed.add_field(name="Reason", value=reason, inline=True)
                 
-                await interaction.edit_original_response(embed=embed, view=None)
+                await ctx.edit(embed=embed, view=None)
                 
             except Exception as e:
                 embed = discord.Embed(
@@ -286,13 +278,12 @@ class Moderation(commands.Cog):
                     description=f"Could not kick {member.mention}\n\nError: {str(e)}",
                     color=0xFF0000
                 )
-                await interaction.edit_original_response(embed=embed, view=None)
+                await ctx.edit(embed=embed, view=None)
 
-    @app_commands.command(name="warnings", description="📊 View member warnings")
-    @app_commands.describe(member="Member to check warnings for")
-    async def warnings(self, interaction: discord.Interaction, member: discord.Member = None):
+    @slash_command(description="📊 View member warnings")
+    async def warnings(self, ctx, member: Option(discord.Member, "Member to check warnings for", required=False)):
         """View warnings with enhanced display"""
-        target = member or interaction.user
+        target = member or ctx.author
         
         warnings_file = "Cogs/Moderation/reports.json"
         try:
@@ -301,7 +292,7 @@ class Moderation(commands.Cog):
         except (FileNotFoundError, json.JSONDecodeError):
             warnings = {}
 
-        guild_id = str(interaction.guild.id)
+        guild_id = str(ctx.guild.id)
         member_id = str(target.id)
 
         if guild_id not in warnings or member_id not in warnings[guild_id]:
@@ -345,7 +336,7 @@ class Moderation(commands.Cog):
         embed.set_thumbnail(url=target.display_avatar.url)
         embed.set_footer(text="📊 Warning system • Keep your server safe")
         
-        await interaction.response.send_message(embed=embed)
+        await ctx.respond(embed=embed)
 
 def setup(bot):
     bot.add_cog(Moderation(bot))

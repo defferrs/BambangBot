@@ -1,17 +1,17 @@
 from googlesearch import search
 import discord
 from discord.ext import commands
-from discord import app_commands
+from discord.commands import Option  #Importing the packages
 import datetime
+from discord.commands import slash_command
 
 class Search(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="search", description="Cari informasi di Google")
-    @app_commands.describe(query="Kata kunci pencarian")
-    async def search(self, interaction: discord.Interaction, *, query: str):
-        await interaction.response.defer()
+    @slash_command(description="Cari informasi di Google")
+    async def search(self, ctx, query: Option(str, "Kata kunci pencarian")):
+        await ctx.defer()
         
         embed = discord.Embed(
             title="🔍 Hasil Pencarian Google", 
@@ -62,7 +62,7 @@ class Search(commands.Cog):
             )
         
         embed.set_footer(text="Powered by Google Search")
-        await interaction.followup.send(embed=embed)
+        await ctx.followup.send(embed=embed)
 
 
 
