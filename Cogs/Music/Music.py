@@ -566,6 +566,9 @@ class Music(commands.Cog):
         )
         await ctx.respond(embed=loading_embed)
 
+        # Get voice channel for later use
+        voice_channel = ctx.author.voice.channel
+
         # Check if it's a direct YouTube URL
         if 'youtube.com' in query or 'youtu.be' in query:
             # Direct URL - extract info and play immediately
@@ -636,9 +639,6 @@ class Music(commands.Cog):
             view = SearchResultsView(self.bot, ctx, search_results, voice_channel)
             await ctx.edit(embed=embed, view=view)
             return
-
-        # Get voice channel for later use
-        voice_channel = ctx.author.voice.channel
 
     async def play_next(self, ctx, voice):
         """Play the next song in queue"""
