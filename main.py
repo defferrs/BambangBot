@@ -115,6 +115,10 @@ async def on_guild_join(guild):
             pass  # If we can't send, that's okay
 
 print("🔄 Loading cogs...")
+if not os.path.exists('./Cogs'):
+    print("❌ Cogs directory not found!")
+    exit(1)
+
 for foldername in os.listdir('./Cogs'): #for every folder in cogs
     for filename in os.listdir(f'./Cogs/{foldername}'):# for every file in a folder in cogs
         if filename.endswith('.py') and not filename in ['util.py', 'error.py']: #if the file is a python file and if the file is a cog

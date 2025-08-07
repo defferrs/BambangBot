@@ -99,10 +99,7 @@ class MusicControls(discord.ui.View):
             pass
         except Exception as e:
             print(f"Pause button error: {e}")
-            try:
-                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
-            except:
-                pass
+            await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
 
     @discord.ui.button(emoji="▶️", style=discord.ButtonStyle.success, custom_id="resume")
     async def resume_button(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -123,10 +120,7 @@ class MusicControls(discord.ui.View):
             pass
         except Exception as e:
             print(f"Resume button error: {e}")
-            try:
-                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
-            except:
-                pass
+            await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
 
     @discord.ui.button(emoji="⏭️", style=discord.ButtonStyle.primary, custom_id="skip")
     async def skip_button(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -169,10 +163,7 @@ class MusicControls(discord.ui.View):
             pass
         except Exception as e:
             print(f"Skip button error: {e}")
-            try:
-                await interaction.response.send_message("❌ An error occurred while skipping!", ephemeral=True)
-            except:
-                pass
+            await interaction.response.send_message("❌ An error occurred while skipping!", ephemeral=True)
 
     @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger, custom_id="stop")
     async def stop_button(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -198,10 +189,7 @@ class MusicControls(discord.ui.View):
             pass
         except Exception as e:
             print(f"Stop button error: {e}")
-            try:
-                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
-            except:
-                pass
+            await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
 
     @discord.ui.button(emoji="🎵", style=discord.ButtonStyle.secondary, custom_id="autoplay")
     async def autoplay_button(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -290,10 +278,7 @@ class MusicControls(discord.ui.View):
             pass
         except Exception as e:
             print(f"Auto-play button error: {e}")
-            try:
-                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
-            except:
-                pass
+            await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
 
     @discord.ui.button(emoji="🔀", style=discord.ButtonStyle.secondary, custom_id="shuffle")
     async def shuffle_button(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -317,10 +302,7 @@ class MusicControls(discord.ui.View):
             pass
         except Exception as e:
             print(f"Shuffle button error: {e}")
-            try:
-                await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
-            except:
-                pass
+            await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
 
 class SearchResultsView(discord.ui.View):
     def __init__(self, bot, ctx, search_results, voice_channel):
@@ -1109,10 +1091,7 @@ class Music(commands.Cog):
             pass
         except Exception as e:
             print(f"Queue command error: {e}")
-            try:
-                await ctx.respond("❌ An error occurred while displaying the queue!", ephemeral=True)
-            except:
-                pass
+            await ctx.respond("❌ An error occurred while displaying the queue!", ephemeral=True)
 
     @slash_command(description="⏹️ Stop music and clear queue")
     async def stop(self, ctx):
@@ -1420,7 +1399,7 @@ class Music(commands.Cog):
         view = MusicControls(self.bot)
         await ctx.edit(embed=embed, view=view)
 
-@slash_command(description="🧹 Clean up downloaded music files")
+    @slash_command(description="🧹 Clean up downloaded music files")
     async def cleanup(self, ctx):
         """Clean up downloaded music files to free space"""
         try:
