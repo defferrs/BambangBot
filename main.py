@@ -1,8 +1,10 @@
 import discord
 from discord.ext import commands
+from dotenv import load_dotenv
 import os
 
-TOKEN = os.environ.get('TOKEN')
+load_dotenv()
+TOKEN = os.getenv('TOKEN')
 if not TOKEN:
     print("ERROR: No TOKEN environment variable found!")
     exit(1)
