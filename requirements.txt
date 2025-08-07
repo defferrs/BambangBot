@@ -1,6 +1,7 @@
 
 # Discord Bot Dependencies
 py-cord>=2.6.1
+python-dotenv>=1.0.0
 
 # Music functionality
 yt-dlp>=2025.7.21
