@@ -423,6 +423,7 @@ class Music(commands.Cog):
         self.auto_play_mode = {}
         self.downloaded_files = {}  # Track downloaded files per guild
         self.download_tasks = {}    # Track ongoing downloads
+        self.cleanup_tasks = {}     # Track cleanup tasks for auto-deletion
         self.executor = ThreadPoolExecutor(max_workers=3)  # For concurrent downloads
         
         # Create downloads directory
@@ -513,6 +514,45 @@ class Music(commands.Cog):
             # Remove from active downloads
             if guild_id in self.download_tasks:
                 self.download_tasks[guild_id].discard(url)
+
+    def schedule_file_cleanup(self, guild_id, url, filename, delay_minutes=5):
+        """Schedule a file for deletion after specified delay"""
+        if guild_id not in self.cleanup_tasks:
+            self.cleanup_tasks[guild_id] = {}
+        
+        # Cancel existing cleanup task if it exists
+        if url in self.cleanup_tasks[guild_id]:
+            self.cleanup_tasks[guild_id][url].cancel()
+        
+        # Schedule new cleanup task
+        task = asyncio.create_task(self._cleanup_after_delay(guild_id, url, filename, delay_minutes * 60))
+        self.cleanup_tasks[guild_id][url] = task
+
+    async def _cleanup_after_delay(self, guild_id, url, filename, delay_seconds):
+        """Delete file after delay"""
+        try:
+            await asyncio.sleep(delay_seconds)
+            
+            # Check if file still exists and remove it
+            if os.path.exists(filename):
+                os.remove(filename)
+                print(f"🗑️ Auto-deleted: {filename}")
+            
+            # Remove from tracking
+            if (guild_id in self.downloaded_files and 
+                url in self.downloaded_files[guild_id]):
+                del self.downloaded_files[guild_id][url]
+                
+            # Remove cleanup task from tracking
+            if (guild_id in self.cleanup_tasks and 
+                url in self.cleanup_tasks[guild_id]):
+                del self.cleanup_tasks[guild_id][url]
+                
+        except asyncio.CancelledError:
+            # Task was cancelled, don't delete file
+            pass
+        except Exception as e:
+            print(f"Cleanup error for {filename}: {e}")
 
     async def search_youtube(self, query):
         """Search for music on YouTube"""
@@ -954,6 +994,14 @@ class Music(commands.Cog):
             # Play audio
             voice.play(audio_source, after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(ctx, voice), self.bot.loop))
 
+            # Schedule file cleanup for downloaded files (5 minutes after song starts)
+            if using_downloaded and ctx.guild.id in self.downloaded_files and url in self.downloaded_files[ctx.guild.id]:
+                downloaded_file = self.downloaded_files[ctx.guild.id][url]
+                # Calculate cleanup time: song duration + 5 minutes buffer
+                cleanup_delay = max(5, (duration // 60) + 5) if duration else 5
+                self.schedule_file_cleanup(ctx.guild.id, url, downloaded_file, cleanup_delay)
+                print(f"🕒 Scheduled cleanup for {title} in {cleanup_delay} minutes")
+
             # Now playing embed with source status
             source_icon = "💾" if using_downloaded else "🌐"
             source_text = "Downloaded" if using_downloaded else "Streaming"
@@ -975,7 +1023,8 @@ class Music(commands.Cog):
             if hasattr(self, 'auto_play_mode') and ctx.guild.id in self.auto_play_mode:
                 auto_play_status = " • 🎵 Auto-play active"
             
-            embed.set_footer(text=f"🎵 Use the buttons below to control playback • Mobile optimized{auto_play_status}")
+            cleanup_info = f" • 🗑️ Auto-cleanup in {max(5, (duration // 60) + 5) if duration else 5}min" if using_downloaded else ""
+            embed.set_footer(text=f"🎵 Use the buttons below to control playback • Mobile optimized{auto_play_status}{cleanup_info}")
 
             view = MusicControls(self.bot)
             await ctx.edit(embed=embed, view=view)
@@ -1020,11 +1069,17 @@ class Music(commands.Cog):
                 if ctx.guild.id in self.downloaded_files:
                     del self.downloaded_files[ctx.guild.id]
                 
+                # Cancel all scheduled cleanup tasks for this guild
+                if ctx.guild.id in self.cleanup_tasks:
+                    for task in self.cleanup_tasks[ctx.guild.id].values():
+                        task.cancel()
+                    del self.cleanup_tasks[ctx.guild.id]
+                
                 size_mb = total_size / (1024 * 1024)
                 
                 embed = discord.Embed(
                     title="🧹 Cleanup Complete",
-                    description=f"Removed **{file_count}** downloaded files\nFreed **{size_mb:.1f} MB** of storage space",
+                    description=f"Removed **{file_count}** downloaded files\nFreed **{size_mb:.1f} MB** of storage space\n⏰ Cancelled all scheduled cleanups",
                     color=0x00FF00
                 )
             else:
