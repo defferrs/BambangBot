@@ -7,6 +7,8 @@ import yt_dlp
 import re
 import os
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 # Global flags - will be checked at runtime, not import time
 VOICE_ENABLED = None
@@ -57,19 +59,20 @@ FFMPEG_OPTIONS = {
     'options': '-vn'
 }
 
-# yt-dlp options
+# yt-dlp options for downloading
 YDL_OPTIONS = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
     'noplaylist': True,
     'extractaudio': True,
     'audioformat': 'mp3',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'outtmpl': 'downloads/%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
     'no_warnings': True,
     'logtostderr': False,
     'ignoreerrors': False,
     'default_search': 'auto',
-    'source_address': '0.0.0.0'
+    'source_address': '0.0.0.0',
+    'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
 }
 
 class MusicControls(discord.ui.View):
@@ -418,6 +421,138 @@ class Music(commands.Cog):
         self.queue = {}
         self.current_song = {}
         self.auto_play_mode = {}
+        self.downloaded_files = {}  # Track downloaded files per guild
+        self.download_tasks = {}    # Track ongoing downloads
+        self.cleanup_tasks = {}     # Track cleanup tasks for auto-deletion
+        self.executor = ThreadPoolExecutor(max_workers=3)  # For concurrent downloads
+        
+        # Create downloads directory
+        if not os.path.exists('downloads'):
+            os.makedirs('downloads')
+
+    def get_safe_filename(self, url):
+        """Generate a safe filename from URL"""
+        import hashlib
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:10]
+        return f"downloads/audio_{url_hash}.mp3"
+    
+    async def download_audio(self, url, title="Unknown"):
+        """Download audio file from URL"""
+        try:
+            filename = self.get_safe_filename(url)
+            
+            # Check if already downloaded
+            if os.path.exists(filename):
+                return filename
+            
+            # Download options optimized for speed and reliability
+            download_opts = {
+                'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+                'outtmpl': filename,
+                'extractaudio': True,
+                'audioformat': 'mp3',
+                'audioquality': '192K',
+                'quiet': True,
+                'no_warnings': True,
+                'ignoreerrors': True,
+                'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                'extractor_args': {
+                    'youtube': {
+                        'skip': ['dash', 'hls'],
+                        'player_client': ['android', 'web']
+                    }
+                }
+            }
+            
+            # Run download in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(self.executor, self._download_sync, url, download_opts)
+            
+            if os.path.exists(filename):
+                print(f"✅ Downloaded: {title}")
+                return filename
+            else:
+                print(f"❌ Download failed: {title}")
+                return None
+                
+        except Exception as e:
+            print(f"Download error for {title}: {e}")
+            return None
+    
+    def _download_sync(self, url, opts):
+        """Synchronous download function for thread pool"""
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.download([url])
+        except Exception as e:
+            print(f"Sync download error: {e}")
+    
+    async def download_in_background(self, guild_id, songs_to_download):
+        """Download multiple songs in background for auto-play"""
+        if guild_id not in self.download_tasks:
+            self.download_tasks[guild_id] = set()
+        
+        for title, url in songs_to_download:
+            if url not in self.download_tasks[guild_id]:
+                self.download_tasks[guild_id].add(url)
+                # Start download task
+                task = asyncio.create_task(self._background_download_task(guild_id, title, url))
+                # Don't await, let it run in background
+    
+    async def _background_download_task(self, guild_id, title, url):
+        """Background task for downloading a single song"""
+        try:
+            filename = await self.download_audio(url, title)
+            if filename:
+                if guild_id not in self.downloaded_files:
+                    self.downloaded_files[guild_id] = {}
+                self.downloaded_files[guild_id][url] = filename
+                print(f"🎵 Background downloaded: {title}")
+        except Exception as e:
+            print(f"Background download error for {title}: {e}")
+        finally:
+            # Remove from active downloads
+            if guild_id in self.download_tasks:
+                self.download_tasks[guild_id].discard(url)
+
+    def schedule_file_cleanup(self, guild_id, url, filename, delay_minutes=5):
+        """Schedule a file for deletion after specified delay"""
+        if guild_id not in self.cleanup_tasks:
+            self.cleanup_tasks[guild_id] = {}
+        
+        # Cancel existing cleanup task if it exists
+        if url in self.cleanup_tasks[guild_id]:
+            self.cleanup_tasks[guild_id][url].cancel()
+        
+        # Schedule new cleanup task
+        task = asyncio.create_task(self._cleanup_after_delay(guild_id, url, filename, delay_minutes * 60))
+        self.cleanup_tasks[guild_id][url] = task
+
+    async def _cleanup_after_delay(self, guild_id, url, filename, delay_seconds):
+        """Delete file after delay"""
+        try:
+            await asyncio.sleep(delay_seconds)
+            
+            # Check if file still exists and remove it
+            if os.path.exists(filename):
+                os.remove(filename)
+                print(f"🗑️ Auto-deleted: {filename}")
+            
+            # Remove from tracking
+            if (guild_id in self.downloaded_files and 
+                url in self.downloaded_files[guild_id]):
+                del self.downloaded_files[guild_id][url]
+                
+            # Remove cleanup task from tracking
+            if (guild_id in self.cleanup_tasks and 
+                url in self.cleanup_tasks[guild_id]):
+                del self.cleanup_tasks[guild_id][url]
+                
+        except asyncio.CancelledError:
+            # Task was cancelled, don't delete file
+            pass
+        except Exception as e:
+            print(f"Cleanup error for {filename}: {e}")
 
     async def search_youtube(self, query):
         """Search for music on YouTube"""
@@ -474,8 +609,19 @@ class Music(commands.Cog):
             return []
 
     async def play_selected_song(self, ctx, selected_song, voice_channel):
-        """Play the selected song from search results"""
+        """Play the selected song from search results - now with download first"""
         try:
+            # Show downloading status
+            download_embed = discord.Embed(
+                title="⬬ Downloading...",
+                description=f"**{selected_song['title']}**\n\nDownloading for better quality playback...",
+                color=0xFFA500
+            )
+            await ctx.edit(embed=download_embed)
+            
+            # Download the song first
+            downloaded_file = await self.download_audio(selected_song['url'], selected_song['title'])
+            
             # Connect to voice channel
             voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 
@@ -493,12 +639,16 @@ class Music(commands.Cog):
                 await ctx.edit(embed=error_embed)
                 return
 
-            # Initialize queue if not exists
+            # Initialize queues if not exists
             if ctx.guild.id not in self.queue:
                 self.queue[ctx.guild.id] = []
+            if ctx.guild.id not in self.downloaded_files:
+                self.downloaded_files[ctx.guild.id] = {}
 
-            # Add to queue
+            # Add to queue and track download
             self.queue[ctx.guild.id].append((selected_song['title'], selected_song['url']))
+            if downloaded_file:
+                self.downloaded_files[ctx.guild.id][selected_song['url']] = downloaded_file
 
             # Track the song for potential auto-play recommendations
             if not hasattr(self, 'last_played'):
@@ -510,9 +660,12 @@ class Music(commands.Cog):
                 await self.play_next(ctx, voice)
             else:
                 # Song added to queue
+                status_icon = "✅" if downloaded_file else "⚠️"
+                status_text = "Downloaded & ready" if downloaded_file else "Download failed, will stream"
+                
                 embed = discord.Embed(
                     title="📝 Added to Queue",
-                    description=f"**{selected_song['title']}**\n\nPosition in queue: **{len(self.queue[ctx.guild.id])}**",
+                    description=f"**{selected_song['title']}**\n\nPosition in queue: **{len(self.queue[ctx.guild.id])}**\n{status_icon} {status_text}",
                     color=0x00FF00
                 )
                 embed.add_field(name="Duration", value=f"{selected_song['duration']//60}:{selected_song['duration']%60:02d}" if selected_song['duration'] else "Unknown", inline=True)
@@ -642,7 +795,7 @@ class Music(commands.Cog):
             return
 
     async def play_next(self, ctx, voice):
-        """Play the next song in queue"""
+        """Play the next song in queue - using downloaded files when available"""
         # Check if voice is still connected
         if not voice or not voice.is_connected():
             print("Voice client disconnected, cannot continue playing")
@@ -659,9 +812,19 @@ class Music(commands.Cog):
                         # Initialize queue if it doesn't exist
                         if ctx.guild.id not in self.queue:
                             self.queue[ctx.guild.id] = []
+                        
+                        # Add to queue
+                        songs_to_add = []
                         for rec in new_recommendations[:5]:  # Add 5 more songs for better continuity
                             self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
+                            songs_to_add.append((rec['title'], rec['webpage_url']))
+                        
                         print(f"Auto-play: Added {len(new_recommendations)} recommendations")
+                        
+                        # Start background downloads for auto-play songs
+                        if songs_to_add:
+                            await self.download_in_background(ctx.guild.id, songs_to_add)
+                        
                         # Continue playing
                         if self.queue[ctx.guild.id]:
                             await self.play_next(ctx, voice)
@@ -678,52 +841,101 @@ class Music(commands.Cog):
         if ctx.guild.id in getattr(self, 'auto_play_mode', {}):
             self.auto_play_mode[ctx.guild.id] = url
 
-        # Get audio source with multiple fallback methods and bot detection avoidance
-        ydl_opts_play = {
-            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'extractaudio': False,
-            'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-            'restrictfilenames': True,
-            'noplaylist': True,
-            'nocheckcertificate': True,
-            'ignoreerrors': True,
-            'logtostderr': False,
-            'age_limit': 18,
-            'default_search': 'auto',
-            'cookiefile': None,
-            'extractor_args': {
-                'youtube': {
-                    'skip': ['dash', 'hls'],
-                    'player_client': ['android', 'web']
-                }
-            },
-            'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'Origin': 'https://www.youtube.com',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-            }
-        }
+        # Auto-download upcoming songs if auto-play is active
+        if (hasattr(self, 'auto_play_mode') and ctx.guild.id in self.auto_play_mode and 
+            ctx.guild.id in self.queue and len(self.queue[ctx.guild.id]) <= 2):
+            # When queue is getting low, get more recommendations and download them
+            try:
+                new_recommendations = await self.get_youtube_recommendations(url)
+                if new_recommendations:
+                    songs_to_add = []
+                    for rec in new_recommendations[:3]:  # Add 3 more songs
+                        self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
+                        songs_to_add.append((rec['title'], rec['webpage_url']))
+                    
+                    # Start downloading these in background
+                    await self.download_in_background(ctx.guild.id, songs_to_add)
+                    print(f"Auto-play: Queued and downloading {len(songs_to_add)} more songs")
+            except Exception as e:
+                print(f"Auto-play recommendation error: {e}")
 
-        audio_url = None
+        # Check if we have a downloaded file first
+        audio_source = None
         duration = 0
         thumbnail = ''
+        using_downloaded = False
+        
+        if (ctx.guild.id in self.downloaded_files and 
+            url in self.downloaded_files[ctx.guild.id]):
+            
+            downloaded_file = self.downloaded_files[ctx.guild.id][url]
+            if os.path.exists(downloaded_file):
+                try:
+                    # Use downloaded file - much more reliable!
+                    audio_source = discord.FFmpegPCMAudio(
+                        downloaded_file,
+                        options='-vn -filter:a "volume=0.5"'
+                    )
+                    using_downloaded = True
+                    print(f"✅ Playing from downloaded file: {title}")
+                    
+                    # Get metadata from downloaded file for duration
+                    try:
+                        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                            info = ydl.extract_info(url, download=False)
+                            duration = info.get('duration', 0)
+                            thumbnail = info.get('thumbnail', '')
+                    except:
+                        pass  # Metadata not critical for playback
+                        
+                except Exception as e:
+                    print(f"Failed to play downloaded file: {e}")
+                    audio_source = None
 
-        # Try multiple extraction methods
-        extraction_methods = [ydl_opts_play]
+        # Fallback to streaming if download not available
+        if not audio_source:
+            print(f"⚠️ No download available for {title}, streaming instead...")
+            
+            # Get audio source with streaming fallback
+            ydl_opts_play = {
+                'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+                'quiet': True,
+                'no_warnings': True,
+                'extractaudio': False,
+                'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+                'restrictfilenames': True,
+                'noplaylist': True,
+                'nocheckcertificate': True,
+                'ignoreerrors': True,
+                'logtostderr': False,
+                'age_limit': 18,
+                'default_search': 'auto',
+                'cookiefile': None,
+                'extractor_args': {
+                    'youtube': {
+                        'skip': ['dash', 'hls'],
+                        'player_client': ['android', 'web']
+                    }
+                },
+                'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Origin': 'https://www.youtube.com',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                }
+            }
 
-        for i, opts in enumerate(extraction_methods):
+            audio_url = None
+
             try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
+                with yt_dlp.YoutubeDL(ydl_opts_play) as ydl:
                     info = ydl.extract_info(url, download=False)
 
                     # Get the best audio format
@@ -739,51 +951,64 @@ class Music(commands.Cog):
                     if audio_url:
                         duration = info.get('duration', 0)
                         thumbnail = info.get('thumbnail', '')
-                        break
 
             except Exception as extraction_error:
-                print(f"Extraction method {i+1} failed: {str(extraction_error)}")
-                continue
+                print(f"Streaming extraction failed: {str(extraction_error)}")
 
-        if not audio_url:
-            raise Exception("Could not extract audio URL from any method")
+            if not audio_url:
+                raise Exception("Could not extract audio URL for streaming")
+
+            # Create streaming source
+            try:
+                ffmpeg_options_list = [
+                    {
+                        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin -user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"',
+                        'options': '-vn -filter:a "volume=0.5"'
+                    },
+                    {
+                        'before_options': '-nostdin',
+                        'options': '-vn'
+                    },
+                    {}  # No options fallback
+                ]
+
+                for i, ffmpeg_options in enumerate(ffmpeg_options_list):
+                    try:
+                        if ffmpeg_options:
+                            audio_source = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
+                        else:
+                            audio_source = discord.FFmpegPCMAudio(audio_url)
+                        break
+                    except Exception as ffmpeg_error:
+                        print(f"FFmpeg method {i+1} failed: {str(ffmpeg_error)}")
+                        continue
+
+                if not audio_source:
+                    raise Exception("Could not create streaming audio source")
+
+            except Exception as e:
+                raise Exception(f"Streaming playback failed: {e}")
 
         try:
-            # Enhanced FFmpeg options with multiple fallbacks
-            ffmpeg_options_list = [
-                {
-                    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin -user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"',
-                    'options': '-vn -filter:a "volume=0.5"'
-                },
-                {
-                    'before_options': '-nostdin',
-                    'options': '-vn'
-                },
-                {}  # No options fallback
-            ]
-
-            source = None
-            for i, ffmpeg_options in enumerate(ffmpeg_options_list):
-                try:
-                    if ffmpeg_options:
-                        source = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
-                    else:
-                        source = discord.FFmpegPCMAudio(audio_url)
-                    break
-                except Exception as ffmpeg_error:
-                    print(f"FFmpeg method {i+1} failed: {str(ffmpeg_error)}")
-                    continue
-
-            if not source:
-                raise Exception("Could not create audio source with any FFmpeg options")
 
             # Play audio
-            voice.play(source, after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(ctx, voice), self.bot.loop))
+            voice.play(audio_source, after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(ctx, voice), self.bot.loop))
 
-            # Now playing embed
+            # Schedule file cleanup for downloaded files (5 minutes after song starts)
+            if using_downloaded and ctx.guild.id in self.downloaded_files and url in self.downloaded_files[ctx.guild.id]:
+                downloaded_file = self.downloaded_files[ctx.guild.id][url]
+                # Calculate cleanup time: song duration + 5 minutes buffer
+                cleanup_delay = max(5, (duration // 60) + 5) if duration else 5
+                self.schedule_file_cleanup(ctx.guild.id, url, downloaded_file, cleanup_delay)
+                print(f"🕒 Scheduled cleanup for {title} in {cleanup_delay} minutes")
+
+            # Now playing embed with source status
+            source_icon = "💾" if using_downloaded else "🌐"
+            source_text = "Downloaded" if using_downloaded else "Streaming"
+            
             embed = discord.Embed(
                 title="🎵 Now Playing",
-                description=f"**{title}**",
+                description=f"**{title}**\n{source_icon} {source_text}",
                 color=0x1DB954
             )
             embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}" if duration else "Unknown", inline=True)
@@ -792,7 +1017,14 @@ class Music(commands.Cog):
 
             if thumbnail:
                 embed.set_thumbnail(url=thumbnail)
-            embed.set_footer(text="🎵 Use the buttons below to control playback • Mobile optimized")
+            
+            # Show auto-play status
+            auto_play_status = ""
+            if hasattr(self, 'auto_play_mode') and ctx.guild.id in self.auto_play_mode:
+                auto_play_status = " • 🎵 Auto-play active"
+            
+            cleanup_info = f" • 🗑️ Auto-cleanup in {max(5, (duration // 60) + 5) if duration else 5}min" if using_downloaded else ""
+            embed.set_footer(text=f"🎵 Use the buttons below to control playback • Mobile optimized{auto_play_status}{cleanup_info}")
 
             view = MusicControls(self.bot)
             await ctx.edit(embed=embed, view=view)
@@ -814,6 +1046,61 @@ class Music(commands.Cog):
                 user_error = f"Playback failed: {error_msg[:80]}..."
 
             error_embed = discord.Embed(
+
+
+    @slash_command(description="🧹 Clean up downloaded music files")
+    async def cleanup(self, ctx):
+        """Clean up downloaded music files to free space"""
+        try:
+            # Count files
+            download_dir = "downloads"
+            file_count = 0
+            total_size = 0
+            
+            if os.path.exists(download_dir):
+                for filename in os.listdir(download_dir):
+                    filepath = os.path.join(download_dir, filename)
+                    if os.path.isfile(filepath):
+                        file_count += 1
+                        total_size += os.path.getsize(filepath)
+                        os.remove(filepath)
+                
+                # Clear tracking dictionaries
+                if ctx.guild.id in self.downloaded_files:
+                    del self.downloaded_files[ctx.guild.id]
+                
+                # Cancel all scheduled cleanup tasks for this guild
+                if ctx.guild.id in self.cleanup_tasks:
+                    for task in self.cleanup_tasks[ctx.guild.id].values():
+                        task.cancel()
+                    del self.cleanup_tasks[ctx.guild.id]
+                
+                size_mb = total_size / (1024 * 1024)
+                
+                embed = discord.Embed(
+                    title="🧹 Cleanup Complete",
+                    description=f"Removed **{file_count}** downloaded files\nFreed **{size_mb:.1f} MB** of storage space\n⏰ Cancelled all scheduled cleanups",
+                    color=0x00FF00
+                )
+            else:
+                embed = discord.Embed(
+                    title="🧹 Nothing to Clean",
+                    description="No downloaded files found!",
+                    color=0xFFA500
+                )
+                
+            await ctx.respond(embed=embed)
+            
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Cleanup Failed",
+                description=f"Could not clean up files: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.respond(embed=error_embed)
+
+def setup(bot):
+
                 title="❌ Playback Error",
                 description=f"Could not play: **{title}**\n\n**Issue:** {user_error}",
                 color=0xFF0000
@@ -1137,8 +1424,14 @@ class Music(commands.Cog):
         recommendations = await self.get_youtube_recommendations(seed_url)
 
         # Add recommendations to queue
+        songs_to_download = []
         for rec in recommendations:
             self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
+            songs_to_download.append((rec['title'], rec['webpage_url']))
+
+        # Start background downloads for auto-play
+        if songs_to_download:
+            await self.download_in_background(ctx.guild.id, songs_to_download)
 
         # Start playing
         if not voice.is_playing() and not voice.is_paused():
@@ -1147,11 +1440,11 @@ class Music(commands.Cog):
         # Auto-play started embed
         embed = discord.Embed(
             title="🎲 Auto-Play Started!",
-            description=f"**Now Playing:** {seed_title}\n\n**Recommendations Added:** {len(recommendations)} songs",
+            description=f"**Now Playing:** {seed_title}\n\n**Recommendations Added:** {len(recommendations)} songs\n💾 **Downloading in background for smooth playback**",
             color=0x9B59B6
         )
         embed.add_field(name="Queue Length", value=f"{len(self.queue[ctx.guild.id])} songs", inline=True)
-        embed.add_field(name="Mode", value="🎵 Auto-Play", inline=True)
+        embed.add_field(name="Mode", value="🎵 Auto-Play + Download", inline=True)
         embed.add_field(name="Based on", value=f"**{seed_title}**", inline=True)
 
         if thumbnail:
@@ -1162,7 +1455,7 @@ class Music(commands.Cog):
             rec_list = "\n".join([f"• {rec['title'][:40]}{'...' if len(rec['title']) > 40 else ''}" for rec in recommendations[:3]])
             embed.add_field(name="🎵 Coming Up", value=rec_list, inline=False)
 
-        embed.set_footer(text="🎵 Auto-Play will continue with recommendations • Use buttons to control")
+        embed.set_footer(text="🎵 Auto-Play with downloads active • Songs will be downloaded for better quality")
 
         view = MusicControls(self.bot)
         await ctx.edit(embed=embed, view=view)
