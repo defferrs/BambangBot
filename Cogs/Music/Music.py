@@ -6,6 +6,8 @@ import os
 import json
 from datetime import datetime, timedelta
 import time
+import random
+from concurrent.futures import ThreadPoolExecutor
 
 # Try to import yt_dlp with fallback
 try:
@@ -1442,18 +1444,7 @@ class Music(commands.Cog):
         view = MusicControls(self.bot)
         await ctx.edit(embed=embed, view=view)
 
-def setup(bot):
-    """Setup function that never fails"""
-    try:
-        music_cog = Music(bot)
-        bot.add_cog(music_cog)
-        print("✅ Music cog loaded successfully")
-        print("  ↳ Dependencies will be checked when commands are used")
-    except Exception as e:
-        print(f"⚠️ Music cog failed to load: {e}")
-        # Don't raise the exception to prevent bot startup failure
-
-    @slash_command(description="🧹 Clean up downloaded music files")
+@slash_command(description="🧹 Clean up downloaded music files")
     async def cleanup(self, ctx):
         """Clean up downloaded music files to free space"""
         try:
