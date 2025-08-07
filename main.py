@@ -114,20 +114,35 @@ async def on_guild_join(guild):
         except:
             pass  # If we can't send, that's okay
 
+print("🔄 Loading cogs...")
 for foldername in os.listdir('./Cogs'): #for every folder in cogs
     for filename in os.listdir(f'./Cogs/{foldername}'):# for every file in a folder in cogs
         if filename.endswith('.py') and not filename in ['util.py', 'error.py']: #if the file is a python file and if the file is a cog
             try:
                 bot.load_extension(f'Cogs.{foldername}.{filename[:-3]}')#load the extension
-                print(f"Loaded {foldername}.{filename[:-3]}")
+                print(f"✅ Loaded {foldername}.{filename[:-3]}")
             except Exception as e:
-                print(f"Failed to load {foldername}.{filename[:-3]}: {e}")
+                print(f"❌ Failed to load {foldername}.{filename[:-3]}: {e}")
 
-
+print("🚀 Starting bot...")
 
 try:
+    if not TOKEN:
+        print("❌ ERROR: TOKEN not found in environment variables!")
+        print("📝 Please set your Discord bot token in Replit Secrets:")
+        print("   1. Click on 'Secrets' tab on the left")
+        print("   2. Add key: TOKEN")
+        print("   3. Add value: your_discord_bot_token")
+        exit(1)
+    
+    print(f"🔑 Token found (length: {len(TOKEN)})")
     bot.run(TOKEN)
 except discord.LoginFailure:
-    print("ERROR: Invalid TOKEN provided!")
+    print("❌ ERROR: Invalid TOKEN provided!")
+    print("🔧 Please check that your Discord bot token is correct")
+except discord.HTTPException as e:
+    print(f"❌ ERROR: Discord HTTP error: {e}")
 except Exception as e:
-    print(f"ERROR: Bot failed to start: {e}")
+    print(f"❌ ERROR: Bot failed to start: {e}")
+    import traceback
+    traceback.print_exc()

@@ -2,13 +2,18 @@ import discord
 from discord.ext import commands
 from discord.commands import slash_command, Option
 import asyncio
-import random
-import yt_dlp
-import re
 import os
-import subprocess
-import threading
-from concurrent.futures import ThreadPoolExecutor
+import json
+from datetime import datetime, timedelta
+import time
+
+# Try to import yt_dlp with fallback
+try:
+    import yt_dlp
+    YT_DLP_AVAILABLE = True
+except ImportError:
+    print("⚠️ Warning: yt-dlp not available, music functionality will be limited")
+    YT_DLP_AVAILABLE = False
 
 # Global flags - will be checked at runtime, not import time
 VOICE_ENABLED = None
@@ -53,6 +58,23 @@ def check_voice_dependencies():
     OPUS_ENABLED = True
     return True, "All dependencies ready"
 
+def check_voice_dependencies():
+    """Check if all voice dependencies are available"""
+    issues = []
+
+    if not YT_DLP_AVAILABLE:
+        issues.append("yt-dlp not installed")
+
+    try:
+        import nacl
+    except ImportError:
+        issues.append("PyNaCl not installed")
+
+    if issues:
+        return False, f"Missing dependencies: {', '.join(issues)}"
+
+    return True, "All dependencies available"
+
 # FFmpeg options for better audio quality
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -73,7 +95,7 @@ YDL_OPTIONS = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'user_agent': 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
-}
+} if YT_DLP_AVAILABLE else {}
 
 class MusicControls(discord.ui.View):
     def __init__(self, bot):
@@ -135,7 +157,7 @@ class MusicControls(discord.ui.View):
             if voice and (voice.is_playing() or voice.is_paused()):
                 # Check if auto-play is active
                 music_cog = self.bot.get_cog('Music')
-                is_auto_play = (music_cog and hasattr(music_cog, 'auto_play_mode') and 
+                is_auto_play = (music_cog and hasattr(music_cog, 'auto_play_mode') and
                                interaction.guild.id in music_cog.auto_play_mode)
 
                 voice.stop()
@@ -157,7 +179,7 @@ class MusicControls(discord.ui.View):
 
                 embed = discord.Embed(
                     title="⏭️ Song Skipped",
-                    description="Skipped to the next song in queue!" + 
+                    description="Skipped to the next song in queue!" +
                                ("\n🎵 Auto-play: Getting more recommendations..." if is_auto_play else ""),
                     color=0x3498DB
                 )
@@ -321,7 +343,6 @@ class MusicControls(discord.ui.View):
                 await interaction.response.send_message("❌ An error occurred!", ephemeral=True)
             except:
                 pass
-    
 
 class SearchResultsView(discord.ui.View):
     def __init__(self, bot, ctx, search_results, voice_channel):
@@ -425,7 +446,7 @@ class Music(commands.Cog):
         self.download_tasks = {}    # Track ongoing downloads
         self.cleanup_tasks = {}     # Track cleanup tasks for auto-deletion
         self.executor = ThreadPoolExecutor(max_workers=3)  # For concurrent downloads
-        
+
         # Create downloads directory
         if not os.path.exists('downloads'):
             os.makedirs('downloads')
@@ -435,16 +456,20 @@ class Music(commands.Cog):
         import hashlib
         url_hash = hashlib.md5(url.encode()).hexdigest()[:10]
         return f"downloads/audio_{url_hash}.mp3"
-    
+
     async def download_audio(self, url, title="Unknown"):
         """Download audio file from URL"""
+        if not YT_DLP_AVAILABLE:
+            print(f"yt-dlp not available, cannot download: {title}")
+            return None
+
         try:
             filename = self.get_safe_filename(url)
-            
+
             # Check if already downloaded
             if os.path.exists(filename):
                 return filename
-            
+
             # Download options optimized for speed and reliability
             download_opts = {
                 'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
@@ -463,22 +488,22 @@ class Music(commands.Cog):
                     }
                 }
             }
-            
+
             # Run download in thread pool to avoid blocking
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(self.executor, self._download_sync, url, download_opts)
-            
+
             if os.path.exists(filename):
                 print(f"✅ Downloaded: {title}")
                 return filename
             else:
                 print(f"❌ Download failed: {title}")
                 return None
-                
+
         except Exception as e:
             print(f"Download error for {title}: {e}")
             return None
-    
+
     def _download_sync(self, url, opts):
         """Synchronous download function for thread pool"""
         try:
@@ -486,19 +511,22 @@ class Music(commands.Cog):
                 ydl.download([url])
         except Exception as e:
             print(f"Sync download error: {e}")
-    
+
     async def download_in_background(self, guild_id, songs_to_download):
         """Download multiple songs in background for auto-play"""
+        if not YT_DLP_AVAILABLE:
+            return # Don't attempt download if yt-dlp is not available
+
         if guild_id not in self.download_tasks:
             self.download_tasks[guild_id] = set()
-        
+
         for title, url in songs_to_download:
             if url not in self.download_tasks[guild_id]:
                 self.download_tasks[guild_id].add(url)
                 # Start download task
                 task = asyncio.create_task(self._background_download_task(guild_id, title, url))
                 # Don't await, let it run in background
-    
+
     async def _background_download_task(self, guild_id, title, url):
         """Background task for downloading a single song"""
         try:
@@ -519,11 +547,11 @@ class Music(commands.Cog):
         """Schedule a file for deletion after specified delay"""
         if guild_id not in self.cleanup_tasks:
             self.cleanup_tasks[guild_id] = {}
-        
+
         # Cancel existing cleanup task if it exists
         if url in self.cleanup_tasks[guild_id]:
             self.cleanup_tasks[guild_id][url].cancel()
-        
+
         # Schedule new cleanup task
         task = asyncio.create_task(self._cleanup_after_delay(guild_id, url, filename, delay_minutes * 60))
         self.cleanup_tasks[guild_id][url] = task
@@ -532,22 +560,22 @@ class Music(commands.Cog):
         """Delete file after delay"""
         try:
             await asyncio.sleep(delay_seconds)
-            
+
             # Check if file still exists and remove it
             if os.path.exists(filename):
                 os.remove(filename)
                 print(f"🗑️ Auto-deleted: {filename}")
-            
+
             # Remove from tracking
-            if (guild_id in self.downloaded_files and 
+            if (guild_id in self.downloaded_files and
                 url in self.downloaded_files[guild_id]):
                 del self.downloaded_files[guild_id][url]
-                
+
             # Remove cleanup task from tracking
-            if (guild_id in self.cleanup_tasks and 
+            if (guild_id in self.cleanup_tasks and
                 url in self.cleanup_tasks[guild_id]):
                 del self.cleanup_tasks[guild_id][url]
-                
+
         except asyncio.CancelledError:
             # Task was cancelled, don't delete file
             pass
@@ -556,6 +584,9 @@ class Music(commands.Cog):
 
     async def search_youtube(self, query):
         """Search for music on YouTube"""
+        if not YT_DLP_AVAILABLE:
+            return None
+
         try:
             with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
                 info = ydl.extract_info(f"ytsearch:{query}", download=False)
@@ -573,6 +604,9 @@ class Music(commands.Cog):
 
     async def search_youtube_multiple(self, query, max_results=5):
         """Search for multiple songs on YouTube"""
+        if not YT_DLP_AVAILABLE:
+            return []
+
         try:
             ydl_opts = {
                 'quiet': True,
@@ -618,10 +652,10 @@ class Music(commands.Cog):
                 color=0xFFA500
             )
             await ctx.edit(embed=download_embed)
-            
+
             # Download the song first
             downloaded_file = await self.download_audio(selected_song['url'], selected_song['title'])
-            
+
             # Connect to voice channel
             voice = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
 
@@ -662,7 +696,7 @@ class Music(commands.Cog):
                 # Song added to queue
                 status_icon = "✅" if downloaded_file else "⚠️"
                 status_text = "Downloaded & ready" if downloaded_file else "Download failed, will stream"
-                
+
                 embed = discord.Embed(
                     title="📝 Added to Queue",
                     description=f"**{selected_song['title']}**\n\nPosition in queue: **{len(self.queue[ctx.guild.id])}**\n{status_icon} {status_text}",
@@ -812,19 +846,19 @@ class Music(commands.Cog):
                         # Initialize queue if it doesn't exist
                         if ctx.guild.id not in self.queue:
                             self.queue[ctx.guild.id] = []
-                        
+
                         # Add to queue
                         songs_to_add = []
                         for rec in new_recommendations[:5]:  # Add 5 more songs for better continuity
                             self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
                             songs_to_add.append((rec['title'], rec['webpage_url']))
-                        
+
                         print(f"Auto-play: Added {len(new_recommendations)} recommendations")
-                        
+
                         # Start background downloads for auto-play songs
                         if songs_to_add:
                             await self.download_in_background(ctx.guild.id, songs_to_add)
-                        
+
                         # Continue playing
                         if self.queue[ctx.guild.id]:
                             await self.play_next(ctx, voice)
@@ -842,7 +876,7 @@ class Music(commands.Cog):
             self.auto_play_mode[ctx.guild.id] = url
 
         # Auto-download upcoming songs if auto-play is active
-        if (hasattr(self, 'auto_play_mode') and ctx.guild.id in self.auto_play_mode and 
+        if (hasattr(self, 'auto_play_mode') and ctx.guild.id in self.auto_play_mode and
             ctx.guild.id in self.queue and len(self.queue[ctx.guild.id]) <= 2):
             # When queue is getting low, get more recommendations and download them
             try:
@@ -852,7 +886,7 @@ class Music(commands.Cog):
                     for rec in new_recommendations[:3]:  # Add 3 more songs
                         self.queue[ctx.guild.id].append((rec['title'], rec['webpage_url']))
                         songs_to_add.append((rec['title'], rec['webpage_url']))
-                    
+
                     # Start downloading these in background
                     await self.download_in_background(ctx.guild.id, songs_to_add)
                     print(f"Auto-play: Queued and downloading {len(songs_to_add)} more songs")
@@ -864,10 +898,10 @@ class Music(commands.Cog):
         duration = 0
         thumbnail = ''
         using_downloaded = False
-        
-        if (ctx.guild.id in self.downloaded_files and 
+
+        if (ctx.guild.id in self.downloaded_files and
             url in self.downloaded_files[ctx.guild.id]):
-            
+
             downloaded_file = self.downloaded_files[ctx.guild.id][url]
             if os.path.exists(downloaded_file):
                 try:
@@ -878,7 +912,7 @@ class Music(commands.Cog):
                     )
                     using_downloaded = True
                     print(f"✅ Playing from downloaded file: {title}")
-                    
+
                     # Get metadata from downloaded file for duration
                     try:
                         with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
@@ -887,7 +921,7 @@ class Music(commands.Cog):
                             thumbnail = info.get('thumbnail', '')
                     except:
                         pass  # Metadata not critical for playback
-                        
+
                 except Exception as e:
                     print(f"Failed to play downloaded file: {e}")
                     audio_source = None
@@ -895,7 +929,7 @@ class Music(commands.Cog):
         # Fallback to streaming if download not available
         if not audio_source:
             print(f"⚠️ No download available for {title}, streaming instead...")
-            
+
             # Get audio source with streaming fallback
             ydl_opts_play = {
                 'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
@@ -1005,7 +1039,7 @@ class Music(commands.Cog):
             # Now playing embed with source status
             source_icon = "💾" if using_downloaded else "🌐"
             source_text = "Downloaded" if using_downloaded else "Streaming"
-            
+
             embed = discord.Embed(
                 title="🎵 Now Playing",
                 description=f"**{title}**\n{source_icon} {source_text}",
@@ -1017,12 +1051,12 @@ class Music(commands.Cog):
 
             if thumbnail:
                 embed.set_thumbnail(url=thumbnail)
-            
+
             # Show auto-play status
             auto_play_status = ""
             if hasattr(self, 'auto_play_mode') and ctx.guild.id in self.auto_play_mode:
                 auto_play_status = " • 🎵 Auto-play active"
-            
+
             cleanup_info = f" • 🗑️ Auto-cleanup in {max(5, (duration // 60) + 5) if duration else 5}min" if using_downloaded else ""
             embed.set_footer(text=f"🎵 Use the buttons below to control playback • Mobile optimized{auto_play_status}{cleanup_info}")
 
@@ -1046,61 +1080,6 @@ class Music(commands.Cog):
                 user_error = f"Playback failed: {error_msg[:80]}..."
 
             error_embed = discord.Embed(
-
-
-    @slash_command(description="🧹 Clean up downloaded music files")
-    async def cleanup(self, ctx):
-        """Clean up downloaded music files to free space"""
-        try:
-            # Count files
-            download_dir = "downloads"
-            file_count = 0
-            total_size = 0
-            
-            if os.path.exists(download_dir):
-                for filename in os.listdir(download_dir):
-                    filepath = os.path.join(download_dir, filename)
-                    if os.path.isfile(filepath):
-                        file_count += 1
-                        total_size += os.path.getsize(filepath)
-                        os.remove(filepath)
-                
-                # Clear tracking dictionaries
-                if ctx.guild.id in self.downloaded_files:
-                    del self.downloaded_files[ctx.guild.id]
-                
-                # Cancel all scheduled cleanup tasks for this guild
-                if ctx.guild.id in self.cleanup_tasks:
-                    for task in self.cleanup_tasks[ctx.guild.id].values():
-                        task.cancel()
-                    del self.cleanup_tasks[ctx.guild.id]
-                
-                size_mb = total_size / (1024 * 1024)
-                
-                embed = discord.Embed(
-                    title="🧹 Cleanup Complete",
-                    description=f"Removed **{file_count}** downloaded files\nFreed **{size_mb:.1f} MB** of storage space\n⏰ Cancelled all scheduled cleanups",
-                    color=0x00FF00
-                )
-            else:
-                embed = discord.Embed(
-                    title="🧹 Nothing to Clean",
-                    description="No downloaded files found!",
-                    color=0xFFA500
-                )
-                
-            await ctx.respond(embed=embed)
-            
-        except Exception as e:
-            error_embed = discord.Embed(
-                title="❌ Cleanup Failed",
-                description=f"Could not clean up files: {str(e)}",
-                color=0xFF0000
-            )
-            await ctx.respond(embed=error_embed)
-
-def setup(bot):
-
                 title="❌ Playback Error",
                 description=f"Could not play: **{title}**\n\n**Issue:** {user_error}",
                 color=0xFF0000
@@ -1212,6 +1191,9 @@ def setup(bot):
 
     async def get_youtube_recommendations(self, video_url):
         """Get YouTube recommendations based on a video URL - simplified for better reliability"""
+        if not YT_DLP_AVAILABLE:
+            return []
+
         try:
             # Simple options for faster extraction
             ydl_opts = {
@@ -1250,8 +1232,8 @@ def setup(bot):
                                 search_info = ydl.extract_info(f"ytsearch5:{query}", download=False)
                                 if search_info and 'entries' in search_info:
                                     for entry in search_info['entries']:
-                                        if (entry and 'webpage_url' in entry and 
-                                            entry['webpage_url'] != video_url and 
+                                        if (entry and 'webpage_url' in entry and
+                                            entry['webpage_url'] != video_url and
                                             entry.get('title')):
                                             related_videos.append({
                                                 'title': entry['title'],
@@ -1470,3 +1452,63 @@ def setup(bot):
     except Exception as e:
         print(f"⚠️ Music cog failed to load: {e}")
         # Don't raise the exception to prevent bot startup failure
+
+    @slash_command(description="🧹 Clean up downloaded music files")
+    async def cleanup(self, ctx):
+        """Clean up downloaded music files to free space"""
+        try:
+            # Count files
+            download_dir = "downloads"
+            file_count = 0
+            total_size = 0
+
+            if os.path.exists(download_dir):
+                for filename in os.listdir(download_dir):
+                    filepath = os.path.join(download_dir, filename)
+                    if os.path.isfile(filepath):
+                        file_count += 1
+                        total_size += os.path.getsize(filepath)
+                        os.remove(filepath)
+
+                # Clear tracking dictionaries
+                if ctx.guild.id in self.downloaded_files:
+                    del self.downloaded_files[ctx.guild.id]
+
+                # Cancel all scheduled cleanup tasks for this guild
+                if ctx.guild.id in self.cleanup_tasks:
+                    for task in self.cleanup_tasks[ctx.guild.id].values():
+                        task.cancel()
+                    del self.cleanup_tasks[ctx.guild.id]
+
+                size_mb = total_size / (1024 * 1024)
+
+                embed = discord.Embed(
+                    title="🧹 Cleanup Complete",
+                    description=f"Removed **{file_count}** downloaded files\nFreed **{size_mb:.1f} MB** of storage space\n⏰ Cancelled all scheduled cleanups",
+                    color=0x00FF00
+                )
+            else:
+                embed = discord.Embed(
+                    title="🧹 Nothing to Clean",
+                    description="No downloaded files found!",
+                    color=0xFFA500
+                )
+
+            await ctx.respond(embed=embed)
+
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Cleanup Failed",
+                description=f"Could not clean up files: {str(e)}",
+                color=0xFF0000
+            )
+            await ctx.respond(error_embed)
+
+def setup(bot):
+    try:
+        music_cog = Music(bot)
+        bot.add_cog(music_cog)
+        print("✅ Music cog loaded successfully")
+        print("  ↳ Dependencies will be checked when commands are used")
+    except Exception as e:
+        print(f"⚠️ Music cog failed to load: {e}")
