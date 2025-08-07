@@ -22,45 +22,6 @@ VOICE_ENABLED = None
 OPUS_ENABLED = None
 
 def check_voice_dependencies():
-    """Check voice dependencies at runtime only"""
-    global VOICE_ENABLED, OPUS_ENABLED
-
-    # Check PyNaCl
-    if VOICE_ENABLED is None:
-        try:
-            import nacl
-            import nacl.secret
-            from nacl.encoding import Base64Encoder
-            VOICE_ENABLED = True
-        except ImportError:
-            VOICE_ENABLED = False
-            return False, "PyNaCl not available"
-
-    # Check Opus
-    if OPUS_ENABLED is None:
-        # The 'opuslib' import has been removed to prevent import errors.
-        # We will rely on discord.py's built-in Opus handling.
-        OPUS_ENABLED = False # Initialize to False, will be updated if discord.py loads it
-
-    # Try to load opus from discord.py
-    if not discord.opus.is_loaded():
-        opus_names = ['libopus.so.0', 'libopus.so', 'opus', 'libopus', 'libopus-0.dll', 'opus.dll']
-        for opus_name in opus_names:
-            try:
-                discord.opus.load_opus(opus_name)
-                if discord.opus.is_loaded():
-                    OPUS_ENABLED = True
-                    return True, "All dependencies ready"
-            except Exception as e: # Catch specific exceptions if needed, but general catch is fine here
-                # print(f"Failed to load opus with {opus_name}: {e}") # Optional: for debugging
-                continue
-        return False, "Opus library not available"
-
-    # If discord.opus is already loaded, assume OPUS_ENABLED is True
-    OPUS_ENABLED = True
-    return True, "All dependencies ready"
-
-def check_voice_dependencies():
     """Check if all voice dependencies are available"""
     issues = []
 
@@ -71,6 +32,21 @@ def check_voice_dependencies():
         import nacl
     except ImportError:
         issues.append("PyNaCl not installed")
+
+    # Try to load opus from discord.py
+    if not discord.opus.is_loaded():
+        opus_names = ['libopus.so.0', 'libopus.so', 'opus', 'libopus', 'libopus-0.dll', 'opus.dll']
+        opus_loaded = False
+        for opus_name in opus_names:
+            try:
+                discord.opus.load_opus(opus_name)
+                if discord.opus.is_loaded():
+                    opus_loaded = True
+                    break
+            except Exception:
+                continue
+        if not opus_loaded:
+            issues.append("Opus library not available")
 
     if issues:
         return False, f"Missing dependencies: {', '.join(issues)}"
